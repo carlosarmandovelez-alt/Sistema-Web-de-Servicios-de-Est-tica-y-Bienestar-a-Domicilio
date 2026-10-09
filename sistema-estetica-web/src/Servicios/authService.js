@@ -18,3 +18,22 @@ export const registrarUsuario = async (datosRegistro) => {
 
   return data;
 };
+
+export const loginUsuario = async (datosLogin) => {
+  const response = await fetch(`${API_URL}/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(datosLogin),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const errorMessage = data.message || data.mensaje || 'Error al iniciar sesión';
+    throw new Error(errorMessage);
+  }
+
+  return data;
+};
