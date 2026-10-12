@@ -3,6 +3,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { Registro } from './Componentes/registro';
 import { Login } from './Componentes/login';
 import { RecuperarPassword } from './Componentes/RecuperarPassword';
+import { PerfilCliente } from './Componentes/PerfilCliente';
 
 const SESION_KEY = 'sesion';
 
@@ -28,6 +29,15 @@ function App() {
     setSesion(datos);
   };
 
+  const handleActualizarSesion = (nuevaSesion) => {
+    try {
+      localStorage.setItem(SESION_KEY, JSON.stringify(nuevaSesion));
+    } catch {
+      // Sin acción
+    }
+    setSesion(nuevaSesion);
+  };
+
   const cerrarSesion = () => {
     try {
       localStorage.removeItem(SESION_KEY);
@@ -38,13 +48,29 @@ function App() {
     setVista('login');
   };
 
-  // Usuario con sesión iniciada (reemplazar por el panel real cuando exista)
+  // Usuario con sesión iniciada
   if (sesion) {
+    if (sesion.rol === 'cliente') {
+      return (
+        <div className="App bg-light min-vh-100">
+          <PerfilCliente
+            sesion={sesion}
+            onCerrarSesion={cerrarSesion}
+            onActualizarSesion={handleActualizarSesion}
+          />
+        </div>
+      );
+    }
+
+    // Otros roles (ej. proveedor) mientras se implementa su panel correspondiente
     return (
       <div className="container mt-5" style={{ maxWidth: '480px' }}>
         <div className="card shadow-sm p-4 text-center">
           <h3 className="mb-3">Hola, {sesion.nombre || sesion.email || 'usuario'}</h3>
           {sesion.rol && <p className="text-muted">Rol: {sesion.rol}</p>}
+          <p className="text-muted small">
+            El perfil de cliente está disponible únicamente para usuarios con rol de cliente.
+          </p>
           <button type="button" className="btn btn-outline-secondary" onClick={cerrarSesion}>
             Cerrar sesión
           </button>
