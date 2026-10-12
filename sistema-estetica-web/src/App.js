@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { Registro } from './Componentes/registro';
 import { Login } from './Componentes/login';
+import { RecuperarPassword } from './Componentes/RecuperarPassword';
 
 const SESION_KEY = 'sesion';
 
@@ -54,12 +55,15 @@ function App() {
 
   return (
     <div className="App">
-      {vista === 'login' ? (
+      {vista === 'login' && (
         <Login
           onLoginExitoso={handleLoginExitoso}
           onIrARegistro={() => setVista('registro')}
+          onOlvidarPassword={() => setVista('recuperar')}
         />
-      ) : (
+      )}
+
+      {vista === 'registro' && (
         <>
           <Registro />
           <p className="text-center mt-3">
@@ -69,6 +73,10 @@ function App() {
             </button>
           </p>
         </>
+      )}
+
+      {vista === 'recuperar' && (
+        <RecuperarPassword onVolverALogin={() => setVista('login')} />
       )}
     </div>
   );
