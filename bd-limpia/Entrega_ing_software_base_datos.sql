@@ -323,3 +323,16 @@ CREATE TABLE IF NOT EXISTS token_invalido (
 ) ENGINE = InnoDB;
 
 ALTER TABLE direccion DROP COLUMN id_cliente;
+
+CREATE TABLE IF NOT EXISTS periodo_no_disponible (
+    id_periodo INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    id_proveedor INT UNSIGNED NOT NULL,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    motivo VARCHAR(255) NULL DEFAULT NULL,
+    PRIMARY KEY (id_periodo),
+    CONSTRAINT fk_periodo_proveedor
+        FOREIGN KEY (id_proveedor)
+        REFERENCES proveedor (id_proveedor)
+        ON DELETE CASCADE
+) ENGINE = InnoDB;
