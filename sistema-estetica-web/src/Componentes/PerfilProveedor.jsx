@@ -4,8 +4,18 @@ import {
   actualizarPerfilProveedor,
   actualizarZonasAtencion,
 } from '../Servicios/proveedorService';
+import { RegistrarServicio } from './RegistrarServicio';
+
+const TABS = {
+  PERFIL: 'perfil',
+  SERVICIOS: 'servicios',
+};
 
 export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
+
+  const [tabActiva, setTabActiva] = useState(TABS.PERFIL);
+  // Mensaje de sesion expirada proveniente de RegistrarServicio
+  const [mensajeSesionExpirada, setMensajeSesionExpirada] = useState(null);
   // Estado general del perfil cargado desde el backend
   const [perfil, setPerfil] = useState(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
@@ -381,7 +391,61 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
         </div>
       </header>
 
-      {/* Alerta general de error */}
+      {/* Navegación por pestañas */}
+      <ul className="nav nav-tabs mb-4" role="tablist">
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.PERFIL}
+            className={`nav-link ${tabActiva === TABS.PERFIL ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.PERFIL)}
+          >
+            Mi Perfil Profesional
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.SERVICIOS}
+            className={`nav-link ${tabActiva === TABS.SERVICIOS ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.SERVICIOS)}
+          >
+            Registrar Servicio
+          </button>
+        </li>
+      </ul>
+
+      {/* Alerta de sesión expirada */}
+      {mensajeSesionExpirada && (
+        <div className="alert alert-warning alert-dismissible fade show mb-4" role="alert" aria-live="polite">
+          <div className="d-flex justify-content-between align-items-center">
+            <span>{mensajeSesionExpirada}</span>
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm"
+              onClick={onCerrarSesion}
+            >
+              Cerrar sesión ahora
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tabActiva === TABS.SERVICIOS ? (
+        <RegistrarServicio
+          token={sesion?.token}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : (
+        <>
+          {/* Alerta general de error */}
       {errorGeneral && (
         <div className="alert alert-danger alert-dismissible fade show mb-4" role="alert" aria-live="assertive">
           <div className="d-flex align-items-center justify-content-between">
@@ -669,7 +733,7 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
                           className={`form-control form-control-sm ${erroresZona.barrio_sector ? 'is-invalid' : ''}`}
                           value={formZona.barrio_sector}
                           onChange={handleChangeZona}
-                          placeholder="Ej: Chapinero, Poblado, Norte... (opcional)"
+                          placeholder="Ej: Granada, Arboleda, Ciudad jardín... (opcional)"
                           maxLength={150}
                           disabled={guardandoZonas}
                         />
@@ -812,6 +876,8 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -45,6 +45,8 @@ public class securityConfig {
                 .requestMatchers("/api/servicios/**").hasRole("proveedor")
                 // HU-009 y HU-010: Exploración (público)
                 .requestMatchers("/api/exploracion/**").permitAll()
+                // Categorías (público)
+                .requestMatchers("/api/categorias/**").permitAll()
                 // Errores
                 .requestMatchers("/error").permitAll()
                 // Todo lo demás

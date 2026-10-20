@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/servicios")
 @CrossOrigin(origins = "*")
@@ -25,5 +27,12 @@ public class servicioController {
         String email = authentication.getName();
         servicioResponseDTO servicio = servicioService.crearServicio(email, dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(servicio);
+    }
+    
+    @GetMapping("/mis-servicios")
+    public ResponseEntity<List<servicioResponseDTO>> listarMisServicios(Authentication authentication) {
+        String email = authentication.getName();
+        List<servicioResponseDTO> servicios = servicioService.listarServiciosProveedor(email);
+        return ResponseEntity.ok(servicios);
     }
 }
