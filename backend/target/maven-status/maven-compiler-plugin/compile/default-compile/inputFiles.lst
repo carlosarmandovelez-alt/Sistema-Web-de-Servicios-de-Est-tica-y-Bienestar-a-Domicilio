@@ -11,6 +11,8 @@ C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Biene
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Controller\servicioController.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\actualizarClienteDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\actualizarProveedorDTO.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\actualizarServicioDTO.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\cambiarEstadoServicioDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\categoriaResponseDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\clienteResponseDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\crearServicioDTO.java

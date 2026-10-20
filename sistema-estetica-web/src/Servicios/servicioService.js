@@ -101,11 +101,6 @@ export const obtenerMisServicios = async (token) => {
  * Registra un nuevo servicio en el catálogo del proveedor autenticado.
  * POST /api/servicios
  *
- * El proveedor se identifica a través del token JWT (Authentication.getName()).
- * No se envía id_proveedor en el cuerpo.
- *
- * Body: { id_categoria, nombre, descripcion, duracion_minutos, precio, estado? }
- *
  * @param {string} token - JWT del proveedor autenticado
  * @param {{ id_categoria: number, nombre: string, descripcion: string,
  *           duracion_minutos: number, precio: string|number, estado?: string }} datos - Datos del servicio
@@ -134,6 +129,115 @@ export const registrarServicio = async (token, datos) => {
 
   if (!response.ok) {
     await manejarErrorRespuesta(response, 'Error al registrar el servicio');
+  }
+
+  return await response.json();
+};
+
+/**
+ * HU-007 CA-01: Consulta la información detallada de un servicio propio.
+ * GET /api/servicios/{id}
+ *
+ * @param {string} token - JWT del proveedor autenticado
+ * @param {number|string} idServicio - ID del servicio
+ * @returns {Promise<Object>} servicioResponseDTO
+ */
+export const consultarServicio = async (token, idServicio) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}/${idServicio}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (err) {
+    throw new Error('No fue posible conectar con el servidor. Verifica tu conexión a internet.');
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, 'Error al consultar el servicio');
+  }
+
+  return await response.json();
+};
+
+/**
+ * HU-007 CA-02: Actualiza la información de un servicio propio.
+ * PUT /api/servicios/{id}
+ *
+ * @param {string} token - JWT del proveedor autenticado
+ * @param {number|string} idServicio - ID del servicio a actualizar
+ * @param {{ id_categoria: number, nombre: string, descripcion: string,
+ *           duracion_minutos: number, precio: string|number, estado?: string }} datos - Datos actualizados
+ * @returns {Promise<Object>} servicioResponseDTO
+ */
+export const actualizarServicio = async (token, idServicio, datos) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}/${idServicio}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(datos),
+    });
+  } catch (err) {
+    throw new Error('No fue posible conectar con el servidor. Verifica tu conexión a internet.');
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, 'Error al actualizar el servicio');
+  }
+
+  return await response.json();
+};
+
+/**
+ * HU-007 CA-03 y CA-04: Cambia entre Activo e Inactivo el estado de un servicio propio.
+ * PATCH /api/servicios/{id}/estado
+ *
+ * @param {string} token - JWT del proveedor autenticado
+ * @param {number|string} idServicio - ID del servicio
+ * @param {string} nuevoEstado - "activo" | "inactivo"
+ * @returns {Promise<Object>} servicioResponseDTO
+ */
+export const cambiarEstadoServicio = async (token, idServicio, nuevoEstado) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}/${idServicio}/estado`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ estado: nuevoEstado }),
+    });
+  } catch (err) {
+    throw new Error('No fue posible conectar con el servidor. Verifica tu conexión a internet.');
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, 'Error al cambiar el estado del servicio');
   }
 
   return await response.json();

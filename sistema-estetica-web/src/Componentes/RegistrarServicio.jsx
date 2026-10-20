@@ -3,14 +3,22 @@ import {
   registrarServicio,
   obtenerCategorias,
   obtenerMisServicios,
+  consultarServicio,
+  actualizarServicio,
+  cambiarEstadoServicio,
 } from '../Servicios/servicioService';
 import { CATEGORIAS_PMV } from '../config/categorias';
 
 /**
- * RegistrarServicio
+ * RegistrarServicio (Gestión integral del Catálogo de Servicios - HU-006 y HU-007)
  *
- * Formulario para que un Proveedor autenticado registre un nuevo servicio
- * en su catálogo y consulte sus servicios registrados.
+ * Permite al proveedor autenticado:
+ *   - HU-006: Registrar nuevos servicios en su catálogo.
+ *   - HU-007 CA-01: Consultar la información registrada de sus servicios.
+ *   - HU-007 CA-02: Actualizar información de sus servicios propios.
+ *   - HU-007 CA-03: Desactivar un servicio (cambio a 'inactivo').
+ *   - HU-007 CA-04: Activar un servicio (cambio a 'activo').
+ *   - HU-007 CA-05 y CA-06: Manejo de restricciones de propiedad y autenticación.
  *
  * Props:
  *   - token {string}       JWT del proveedor autenticado
@@ -30,8 +38,14 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
   const [form, setForm] = useState(estadoInicial);
   const [errores, setErrores] = useState({});
   const [errorGeneral, setErrorGeneral] = useState(null);
+  const [mensajeExito, setMensajeExito] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [servicioRegistrado, setServicioRegistrado] = useState(null);
+
+  // Modo edición (HU-007)
+  const [servicioEditando, setServicioEditando] = useState(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [procesandoEstadoId, setProcesandoEstadoId] = useState(null);
 
   // Categorías (dinámicas desde backend con fallback a CATEGORIAS_PMV)
   const [categorias, setCategorias] = useState(CATEGORIAS_PMV);
@@ -53,7 +67,7 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
         );
       }
     } catch {
-      // Si el backend no responde, se mantiene el fallback verificado CATEGORIAS_PMV
+      // Fallback a las categorías verificadas del PMV
       setCategorias(CATEGORIAS_PMV);
     }
   }, []);
@@ -66,24 +80,27 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
       if (Array.isArray(data)) {
         setMisServicios(data);
       }
-    } catch {
-      // Silencioso o no crítico para el render del formulario
+    } catch (err) {
+      if (err.esErrorAutenticacion && onSesionExpirada) {
+        onSesionExpirada(err.message);
+      }
     } finally {
       setCargandoCatalogo(false);
     }
-  }, [token]);
+  }, [token, onSesionExpirada]);
 
   useEffect(() => {
     cargarCategoriasServidor();
     cargarMisServicios();
   }, [cargarCategoriasServidor, cargarMisServicios]);
 
-  // ─── Utilidades ────────────────────────────────────────────────────────────
+  // ─── Utilidades del formulario ─────────────────────────────────────────────
 
   const limpiarFormulario = () => {
     setForm(estadoInicial);
     setErrores({});
     setErrorGeneral(null);
+    setServicioEditando(null);
   };
 
   const handleChange = (e) => {
@@ -91,6 +108,96 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
     setForm((prev) => ({ ...prev, [name]: value }));
     if (errores[name]) {
       setErrores((prev) => ({ ...prev, [name]: null }));
+    }
+  };
+
+  // ─── HU-007 CA-01: Consultar servicio y cargarlo en modo edición ───────────
+  const iniciarEdicion = async (servicio) => {
+    setErrorGeneral(null);
+    setMensajeExito(null);
+    setServicioRegistrado(null);
+    setCargandoDetalle(true);
+
+    try {
+      // Consultar la información registrada en el backend
+      const datosFrescos = await consultarServicio(token, servicio.id);
+      setServicioEditando(datosFrescos);
+      setForm({
+        id_categoria: String(datosFrescos.id_categoria),
+        nombre: datosFrescos.nombre || '',
+        descripcion: datosFrescos.descripcion || '',
+        duracion_minutos: String(datosFrescos.duracion_minutos || ''),
+        precio: String(datosFrescos.precio || ''),
+        estado: datosFrescos.estado || 'activo',
+      });
+      setErrores({});
+      if (typeof window.scrollTo === 'function') {
+        try {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch {
+          // Ignorar en entornos de test como jsdom
+        }
+      }
+    } catch (err) {
+      if (err.esErrorAutenticacion) {
+        if (err.status === 403) {
+          setErrorGeneral(
+            'Acceso denegado: no tienes permiso para consultar este servicio porque no pertenece a tu catálogo.'
+          );
+        } else if (err.status === 401 && onSesionExpirada) {
+          onSesionExpirada(err.message);
+        } else {
+          setErrorGeneral(err.message);
+        }
+      } else {
+        setErrorGeneral(err.message || 'No fue posible consultar los datos del servicio.');
+      }
+    } finally {
+      setCargandoDetalle(false);
+    }
+  };
+
+  const cancelarEdicion = () => {
+    limpiarFormulario();
+  };
+
+  // ─── HU-007 CA-03 y CA-04: Cambio rápido de estado Activo/Inactivo ───────────
+  const handleCambiarEstado = async (idServicio, estadoActual) => {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    setProcesandoEstadoId(idServicio);
+    setErrorGeneral(null);
+    setMensajeExito(null);
+
+    try {
+      const servicioActualizado = await cambiarEstadoServicio(token, idServicio, nuevoEstado);
+      setMensajeExito(
+        `✓ El estado del servicio "${servicioActualizado.nombre}" ahora es ${servicioActualizado.estado}.`
+      );
+      // Actualizar la lista en memoria
+      setMisServicios((prev) =>
+        prev.map((s) => (s.id === idServicio ? servicioActualizado : s))
+      );
+      // Si el servicio editando es el mismo, sincronizarlo
+      if (servicioEditando && servicioEditando.id === idServicio) {
+        setServicioEditando(servicioActualizado);
+        setForm((f) => ({ ...f, estado: servicioActualizado.estado }));
+      }
+    } catch (err) {
+      if (err.esErrorAutenticacion) {
+        if (err.status === 403) {
+          setErrorGeneral(
+            'Acceso denegado: no tienes permiso para cambiar el estado de este servicio porque no pertenece a tu catálogo.'
+          );
+        } else if (err.status === 401 && onSesionExpirada) {
+          onSesionExpirada(err.message);
+        } else {
+          setErrorGeneral(err.message);
+        }
+      } else {
+        setErrorGeneral(err.message || 'No fue posible cambiar el estado del servicio.');
+      }
+    } finally {
+      setProcesandoEstadoId(null);
     }
   };
 
@@ -162,11 +269,12 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
     return Object.keys(nuevosErrores).length === 0;
   };
 
-  // ─── Envío del formulario ───────────────────────────────────────────────────
+  // ─── Envío del formulario (Creación HU-006 / Actualización HU-007) ───────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorGeneral(null);
+    setMensajeExito(null);
     setServicioRegistrado(null);
 
     if (!validar()) {
@@ -186,11 +294,20 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
     };
 
     try {
-      const resultado = await registrarServicio(token, payload);
-      setServicioRegistrado(resultado);
-      limpiarFormulario();
-      // Recargar catálogo actualizado
-      cargarMisServicios();
+      if (servicioEditando) {
+        // HU-007 CA-02: Actualizar servicio existente
+        const resultado = await actualizarServicio(token, servicioEditando.id, payload);
+        setMensajeExito(`✓ Servicio #${resultado.id} ("${resultado.nombre}") actualizado exitosamente.`);
+        setServicioEditando(null);
+        limpiarFormulario();
+        cargarMisServicios();
+      } else {
+        // HU-006: Registrar nuevo servicio
+        const resultado = await registrarServicio(token, payload);
+        setServicioRegistrado(resultado);
+        limpiarFormulario();
+        cargarMisServicios();
+      }
     } catch (err) {
       if (err.fieldErrors) {
         setErrores(err.fieldErrors);
@@ -200,13 +317,15 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
           onSesionExpirada(err.message);
         } else if (err.status === 403) {
           setErrorGeneral(
-            'Acceso denegado: no tienes permiso para registrar servicios. Solo los proveedores autenticados pueden realizar esta acción.'
+            servicioEditando
+              ? 'Acceso denegado: no tienes permiso para gestionar este servicio. Solo el proveedor propietario puede realizar esta acción.'
+              : 'Acceso denegado: no tienes permiso para registrar servicios. Solo los proveedores autenticados pueden realizar esta acción.'
           );
         } else {
           setErrorGeneral(err.message);
         }
       } else {
-        setErrorGeneral(err.message || 'No fue posible registrar el servicio. Inténtalo de nuevo.');
+        setErrorGeneral(err.message || 'No fue posible guardar la información del servicio.');
       }
     } finally {
       setGuardando(false);
@@ -240,16 +359,55 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
 
   return (
     <div className="d-flex flex-column gap-4">
-      <div className="card shadow-sm">
-        <div className="card-header bg-white py-3">
-          <h3 className="h5 mb-0 fw-semibold text-dark">Registrar nuevo servicio</h3>
-          <small className="text-muted">
-            Completa todos los campos para agregar un servicio a tu catálogo
-          </small>
+      {/* ── Formulario de Registro / Edición ── */}
+      <div className="card shadow-sm border-0">
+        <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+          <div>
+            <h3 className="h5 mb-0 fw-semibold text-dark">
+              {servicioEditando
+                ? `Editar servicio: #${servicioEditando.id} - ${servicioEditando.nombre}`
+                : 'Registrar nuevo servicio'}
+            </h3>
+            <small className="text-muted">
+              {servicioEditando
+                ? 'Modifica la información permitida del servicio y guarda los cambios'
+                : 'Completa todos los campos para agregar un servicio a tu catálogo'}
+            </small>
+          </div>
+          {servicioEditando && (
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm"
+              onClick={cancelarEdicion}
+              disabled={guardando}
+            >
+              Cancelar edición
+            </button>
+          )}
         </div>
 
         <div className="card-body">
-          {/* ── Confirmación de registro exitoso ── */}
+          {cargandoDetalle && (
+            <div className="text-center py-3">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+              <span className="ms-2 text-muted small">Cargando información del servicio...</span>
+            </div>
+          )}
+
+          {/* ── Alerta de éxito de actualización ── */}
+          {mensajeExito && (
+            <div className="alert alert-success alert-dismissible fade show mb-4" role="alert" aria-live="polite">
+              <span>{mensajeExito}</span>
+              <button
+                type="button"
+                className="btn-close"
+                aria-label="Cerrar"
+                onClick={() => setMensajeExito(null)}
+              />
+            </div>
+          )}
+
+          {/* ── Confirmación de registro exitoso (HU-006) ── */}
           {servicioRegistrado && (
             <div
               className="alert alert-success mb-4"
@@ -534,54 +692,87 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
                     onChange={handleChange}
                     disabled={guardando}
                   >
-                    <option value="activo">Activo (visible)</option>
-                    <option value="inactivo">Inactivo (oculto)</option>
+                    <option value="activo">Activo (visible en solicitudes)</option>
+                    <option value="inactivo">Inactivo (no disponible)</option>
                   </select>
-                  <small className="text-muted">Visibilidad en catálogo</small>
+                  <small className="text-muted">Disponibilidad para clientes</small>
                 </div>
               </div>
 
-              {/* Botón de envío */}
+              {/* Botones de acción */}
               <div className="d-flex justify-content-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={limpiarFormulario}
-                  disabled={guardando}
-                >
-                  Limpiar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary btn-sm"
-                  disabled={guardando}
-                >
-                  {guardando ? (
-                    <>
-                      <span
-                        className="spinner-border spinner-border-sm me-1"
-                        role="status"
-                        aria-hidden="true"
-                      />
-                      Guardando...
-                    </>
-                  ) : (
-                    'Registrar servicio'
-                  )}
-                </button>
+                {servicioEditando ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cancelarEdicion}
+                      disabled={guardando}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={guardando}
+                    >
+                      {guardando ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Guardando cambios...
+                        </>
+                      ) : (
+                        'Guardar cambios'
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={limpiarFormulario}
+                      disabled={guardando}
+                    >
+                      Limpiar
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={guardando}
+                    >
+                      {guardando ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Guardando...
+                        </>
+                      ) : (
+                        'Registrar servicio'
+                      )}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           )}
         </div>
       </div>
 
-      {/* ── SECCIÓN CATÁLOGO: Mis servicios registrados ── */}
-      <div className="card shadow-sm">
-        <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+      {/* Mi Catálogo de Servicios Registrados (Consulta, Edición y Cambio de Estado) */}
+      <div className="card shadow-sm border-0">
+        <div className="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
           <div>
             <h4 className="h6 mb-0 fw-semibold text-dark">Mi Catálogo de Servicios Registrados</h4>
             <small className="text-muted">
-              Servicios que tienes incorporados en tu oferta profesional
+              Consulta, actualiza y gestiona la disponibilidad (Activo / Inactivo) de tus servicios
             </small>
           </div>
           <button
@@ -593,6 +784,7 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
             {cargandoCatalogo ? 'Actualizando...' : 'Actualizar catálogo'}
           </button>
         </div>
+
         <div className="card-body p-0">
           {cargandoCatalogo && misServicios.length === 0 ? (
             <div className="text-center py-4">
@@ -614,14 +806,15 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
                     <th>Duración</th>
                     <th>Precio</th>
                     <th>Estado</th>
+                    <th className="text-end">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {misServicios.map((srv) => (
-                    <tr key={srv.id}>
+                    <tr key={srv.id} className={servicioEditando?.id === srv.id ? 'table-primary' : ''}>
                       <td className="text-muted">#{srv.id}</td>
                       <td>
-                        <strong className="text-dark">{srv.nombre}</strong>
+                        <strong className="text-dark d-block">{srv.nombre}</strong>
                         {srv.descripcion && (
                           <div className="text-muted text-truncate" style={{ maxWidth: '280px' }}>
                             {srv.descripcion}
@@ -637,8 +830,46 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
                             srv.estado === 'activo' ? 'bg-success' : 'bg-secondary'
                           }`}
                         >
-                          {srv.estado}
+                          {srv.estado === 'activo' ? 'Activo' : 'Inactivo'}
                         </span>
+                      </td>
+                      <td className="text-end">
+                        <div className="btn-group btn-group-sm" role="group">
+                          {/* Botón Editar / Consultar */}
+                          <button
+                            type="button"
+                            className="btn btn-outline-primary"
+                            onClick={() => iniciarEdicion(srv)}
+                            disabled={guardando || procesandoEstadoId === srv.id}
+                            title="Editar información del servicio"
+                          >
+                            Editar
+                          </button>
+                          {/* Botón Activar / Desactivar (CA-03 y CA-04) */}
+                          <button
+                            type="button"
+                            className={`btn ${
+                              srv.estado === 'activo'
+                                ? 'btn-outline-danger'
+                                : 'btn-outline-success'
+                            }`}
+                            onClick={() => handleCambiarEstado(srv.id, srv.estado)}
+                            disabled={guardando || procesandoEstadoId === srv.id}
+                            title={
+                              srv.estado === 'activo'
+                                ? 'Desactivar servicio (no disponible para clientes)'
+                                : 'Activar servicio (disponible para clientes)'
+                            }
+                          >
+                            {procesandoEstadoId === srv.id ? (
+                              <span className="spinner-border spinner-border-sm" role="status" />
+                            ) : srv.estado === 'activo' ? (
+                              'Desactivar'
+                            ) : (
+                              'Activar'
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

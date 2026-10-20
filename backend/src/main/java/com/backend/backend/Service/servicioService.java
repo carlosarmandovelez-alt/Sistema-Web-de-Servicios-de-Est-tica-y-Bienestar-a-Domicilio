@@ -1,9 +1,11 @@
 package com.backend.backend.Service;
 
+import com.backend.backend.DTO.actualizarServicioDTO;
 import com.backend.backend.DTO.crearServicioDTO;
 import com.backend.backend.DTO.servicioResponseDTO;
 import com.backend.backend.Exception.categoriaNoEncontradaException;
 import com.backend.backend.Exception.proveedorNoEncontradoException;
+import com.backend.backend.Exception.servicioNoEncontradoException;
 import com.backend.backend.Model.categoriaModel;
 import com.backend.backend.Model.enums.estadoServicioModel;
 import com.backend.backend.Model.proveedorModel;
@@ -14,6 +16,7 @@ import com.backend.backend.Repository.proveedorRepository;
 import com.backend.backend.Repository.servicioRepository;
 import com.backend.backend.Repository.usuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,15 +101,85 @@ public class servicioService {
     
     @Transactional(readOnly = true)
     public List<servicioResponseDTO> listarServiciosProveedor(String email) {
-        usuarioModel usuario = usuarioRepository.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        
-        proveedorModel proveedor = proveedorRepository.findByUsuario(usuario)
-            .orElseThrow(() -> new proveedorNoEncontradoException("Proveedor no encontrado"));
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
         
         return servicioRepository.findByProveedor(proveedor).stream()
             .map(s -> convertirADTO(s, s.getCategoria(), proveedor))
             .toList();
+    }
+    
+    // HU-007 CA-01: Consulta de un servicio propio
+    @Transactional(readOnly = true)
+    public servicioResponseDTO consultarServicioPropio(String email, Integer idServicio) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = obtenerServicioYValidarPropiedad(idServicio, proveedor);
+        
+        return convertirADTO(servicio, servicio.getCategoria(), proveedor);
+    }
+    
+    // HU-007 CA-02: Actualización de información de un servicio propio
+    @Transactional
+    public servicioResponseDTO actualizarServicio(String email, Integer idServicio, actualizarServicioDTO dto) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = obtenerServicioYValidarPropiedad(idServicio, proveedor);
+        
+        // Validar categoría existente
+        categoriaModel categoria = categoriaRepository.findById(dto.getId_categoria())
+            .orElseThrow(() -> new categoriaNoEncontradaException("La categoría con ID " + dto.getId_categoria() + " no existe"));
+        
+        // Validar categoría en dominio PMV
+        if (!CATEGORIAS_PMV_VALIDAS.contains(categoria.getNombre().trim())) {
+            throw new categoriaNoEncontradaException(
+                "La categoría '" + categoria.getNombre() + "' no pertenece al dominio permitido para el PMV."
+            );
+        }
+        
+        servicio.setCategoria(categoria);
+        servicio.setNombre(dto.getNombre().trim());
+        servicio.setDescripcion(dto.getDescripcion().trim());
+        servicio.setDuracion_minutos(dto.getDuracion_minutos());
+        servicio.setPrecio(dto.getPrecio());
+        
+        if (dto.getEstado() != null) {
+            servicio.setEstado(dto.getEstado());
+        }
+        
+        servicio.setFecha_actualizacion(LocalDateTime.now());
+        
+        servicioModel servicioGuardado = servicioRepository.save(servicio);
+        return convertirADTO(servicioGuardado, categoria, proveedor);
+    }
+    
+    // HU-007 CA-03 y CA-04: Cambio de estado (Activo / Inactivo) de un servicio propio
+    @Transactional
+    public servicioResponseDTO cambiarEstadoServicio(String email, Integer idServicio, estadoServicioModel nuevoEstado) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = obtenerServicioYValidarPropiedad(idServicio, proveedor);
+        
+        servicio.setEstado(nuevoEstado);
+        servicio.setFecha_actualizacion(LocalDateTime.now());
+        
+        servicioModel servicioGuardado = servicioRepository.save(servicio);
+        return convertirADTO(servicioGuardado, servicioGuardado.getCategoria(), proveedor);
+    }
+    
+    private proveedorModel obtenerProveedorPorEmail(String email) {
+        usuarioModel usuario = usuarioRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        
+        return proveedorRepository.findByUsuario(usuario)
+            .orElseThrow(() -> new proveedorNoEncontradoException("Proveedor no encontrado"));
+    }
+    
+    private servicioModel obtenerServicioYValidarPropiedad(Integer idServicio, proveedorModel proveedor) {
+        servicioModel servicio = servicioRepository.findById(idServicio)
+            .orElseThrow(() -> new servicioNoEncontradoException("El servicio con ID " + idServicio + " no existe"));
+        
+        if (!servicio.getProveedor().getId_proveedor().equals(proveedor.getId_proveedor())) {
+            throw new AccessDeniedException("No tienes permiso para gestionar este servicio porque no pertenece a tu catálogo.");
+        }
+        
+        return servicio;
     }
     
     private servicioResponseDTO convertirADTO(servicioModel servicio, categoriaModel categoria, proveedorModel proveedor) {
