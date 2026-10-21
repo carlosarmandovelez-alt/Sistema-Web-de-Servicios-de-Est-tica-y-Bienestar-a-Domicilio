@@ -302,14 +302,14 @@ export const RegistrarServicio = ({
 
     try {
       if (servicioEditando) {
-        // HU-007 CA-02: Actualizar servicio existente
+        // Actualizar servicio existente
         const resultado = await actualizarServicio(token, servicioEditando.id, payload);
         setMensajeExito(`✓ Servicio #${resultado.id} ("${resultado.nombre}") actualizado exitosamente.`);
         setServicioEditando(null);
         limpiarFormulario();
         cargarMisServicios();
       } else {
-        // HU-006: Registrar nuevo servicio
+        // Registrar nuevo servicio
         const resultado = await registrarServicio(token, payload);
         setServicioRegistrado(resultado);
         limpiarFormulario();

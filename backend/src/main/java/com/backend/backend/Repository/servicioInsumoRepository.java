@@ -14,7 +14,7 @@ public interface servicioInsumoRepository extends JpaRepository<servicio_insumoM
     
     List<servicio_insumoModel> findByServicio(servicioModel servicio);
     
-    // HU-008: productos, insumos y equipos ordenados por su identificador de registro
+    // Productos, insumos y equipos ordenados por su identificador de registro
     @Query("SELECT i FROM servicio_insumoModel i WHERE i.servicio = :servicio ORDER BY i.id_insumo ASC")
     List<servicio_insumoModel> findByServicioOrdenado(@Param("servicio") servicioModel servicio);
 }

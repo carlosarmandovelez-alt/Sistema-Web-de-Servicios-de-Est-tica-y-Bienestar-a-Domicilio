@@ -14,7 +14,7 @@ public interface servicioMultimediaRepository extends JpaRepository<servicio_mul
     
     List<servicio_multimediaModel> findByServicio(servicioModel servicio);
     
-    // HU-008: multimedia ordenada para consultarla como parte de la información del servicio
+    // Multimedia ordenada para consultarla como parte de la información del servicio
     @Query("SELECT m FROM servicio_multimediaModel m WHERE m.servicio = :servicio " +
            "ORDER BY m.orden ASC, m.id_multimedia ASC")
     List<servicio_multimediaModel> findByServicioOrdenado(@Param("servicio") servicioModel servicio);

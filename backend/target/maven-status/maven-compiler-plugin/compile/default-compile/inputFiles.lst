@@ -1,5 +1,6 @@
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\BackendApplication.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Config\accessDeniedHandlerCustom.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Config\authenticationEntryPointCustom.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Config\jwtAuthenticationFilter.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Config\passwordConfig.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Config\securityConfig.java
@@ -18,9 +19,11 @@ C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Biene
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\crearServicioDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\direccionDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\InsumoDTO.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\insumoRequestDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\loginRequestDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\loginResponseDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\MultimediaDTO.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\multimediaRequestDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\proveedorDetalleDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\proveedorListadoDTO.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\DTO\proveedorResponseDTO.java
@@ -37,6 +40,8 @@ C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Biene
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\credencialesInvalidasException.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\emailDuplicadoException.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\globalExceptionHandler.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\insumoNoEncontradoException.java
+C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\multimediaNoEncontradaException.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\otpExpiradoException.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\otpInvalidoException.java
 C:\Users\Yuliana\Downloads\Proyecto\Sistema-Web-de-Servicios-de-Est-tica-y-Bienestar-a-Domicilio\backend\src\main\java\com\backend\backend\Exception\proveedorNoEncontradoException.java

@@ -38,7 +38,7 @@ public class exploracionService {
     // HU-009: Exploración de proveedores y servicios
     // ============================================
     
-    // CA-01: Consultar proveedores disponibles
+    // Consultar proveedores disponibles
     public List<proveedorListadoDTO> consultarProveedores() {
         List<proveedorModel> proveedores = proveedorRepository.findProveedoresConServiciosActivos();
         
@@ -58,7 +58,7 @@ public class exploracionService {
         return convertirLista(servicios);
     }
     
-    // CA-02: Búsqueda por categoría
+    // Búsqueda por categoría
     public List<servicioListadoDTO> buscarPorCategoria(Integer idCategoria) {
         List<servicioModel> servicios = servicioRepository.buscarPorCategoriaYEstado(
             estadoServicioModel.activo, idCategoria);

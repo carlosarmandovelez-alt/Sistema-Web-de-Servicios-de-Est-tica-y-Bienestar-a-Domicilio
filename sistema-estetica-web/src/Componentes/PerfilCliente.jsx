@@ -4,8 +4,16 @@ import {
   actualizarDatosPersonales,
   actualizarDireccionPrincipal,
 } from '../Servicios/clienteService';
+import { ExplorarServicios } from './ExplorarServicios';
+
+const TABS = {
+  PERFIL: 'perfil',
+  EXPLORAR: 'explorar',
+};
 
 export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
+  const [tabActiva, setTabActiva] = useState(TABS.PERFIL);
+
   // Estado general del perfil cargado desde el backend
   const [perfil, setPerfil] = useState(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
@@ -339,7 +347,7 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
       <header className="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-4 border-bottom">
         <div>
           <h2 className="h4 mb-1 text-primary fw-bold">Bienestar en Casa</h2>
-          <p className="text-muted small mb-0">Mi Perfil de Cliente</p>
+          <p className="text-muted small mb-0">Panel de Cliente</p>
         </div>
         <div className="d-flex align-items-center gap-3 mt-2 mt-sm-0">
           <span className="badge bg-light text-dark border py-2 px-3">
@@ -355,8 +363,48 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
         </div>
       </header>
 
-      {/* Alerta general de error */}
-      {errorGeneral && (
+      {/* Navegación del panel de Cliente */}
+      <ul className="nav nav-tabs mb-4" role="tablist">
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            id="tab-mi-perfil"
+            aria-selected={tabActiva === TABS.PERFIL}
+            aria-controls="panel-mi-perfil"
+            className={`nav-link ${tabActiva === TABS.PERFIL ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.PERFIL)}
+          >
+            Mi Perfil
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            id="tab-explorar-servicios"
+            aria-selected={tabActiva === TABS.EXPLORAR}
+            aria-controls="panel-explorar-servicios"
+            className={`nav-link ${tabActiva === TABS.EXPLORAR ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.EXPLORAR)}
+          >
+            Explorar servicios
+          </button>
+        </li>
+      </ul>
+
+      {tabActiva === TABS.EXPLORAR ? (
+        <div
+          id="panel-explorar-servicios"
+          role="tabpanel"
+          aria-labelledby="tab-explorar-servicios"
+        >
+          <ExplorarServicios />
+        </div>
+      ) : (
+        <div id="panel-mi-perfil" role="tabpanel" aria-labelledby="tab-mi-perfil">
+          {/* Alerta general de error */}
+          {errorGeneral && (
         <div className="alert alert-danger alert-dismissible fade show mb-4" role="alert" aria-live="assertive">
           <div className="d-flex align-items-center justify-content-between">
             <span>{errorGeneral}</span>
@@ -780,6 +828,8 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
               </div>
             </div>
           </div>
+        </div>
+      )}
         </div>
       )}
     </div>
