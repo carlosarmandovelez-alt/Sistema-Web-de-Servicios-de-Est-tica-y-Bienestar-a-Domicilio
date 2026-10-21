@@ -313,7 +313,9 @@ public class solicitudService {
             s.getFecha_creacion(),
             s.getFecha_actualizacion(),
             s.getCliente().getId_cliente(),
-            s.getProveedor().getId_proveedor()
+            s.getProveedor().getId_proveedor(),
+            s.getCliente().getUsuario().getNombre(),
+            s.getCliente().getUsuario().getApellido()
         );
     }
 

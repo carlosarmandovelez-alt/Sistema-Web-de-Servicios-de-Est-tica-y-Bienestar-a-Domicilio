@@ -28,4 +28,6 @@ public class solicitudResponseDTO {
     private LocalDateTime fecha_actualizacion;
     private Integer id_cliente;
     private Integer id_proveedor;
+    private String nombre_cliente;
+    private String apellido_cliente;
 }
