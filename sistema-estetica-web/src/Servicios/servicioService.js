@@ -242,3 +242,151 @@ export const cambiarEstadoServicio = async (token, idServicio, nuevoEstado) => {
 
   return await response.json();
 };
+
+// ============================================================
+// HU-008: Información complementaria del servicio
+// ============================================================
+
+/**
+ * Ejecuta una petición autenticada y procesa la respuesta del backend.
+ * Para DELETE (204) devuelve null; para el resto, el JSON recibido.
+ */
+const peticionAutenticada = async (token, url, opciones = {}, fallbackMensaje) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      ...opciones,
+      headers: {
+        ...(opciones.body ? { 'Content-Type': 'application/json' } : {}),
+        Authorization: `Bearer ${token}`,
+        ...(opciones.headers || {}),
+      },
+    });
+  } catch (err) {
+    throw new Error('No fue posible conectar con el servidor. Verifica tu conexión a internet.');
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, fallbackMensaje);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return await response.json();
+};
+
+/**
+ * HU-008 CA-01 y CA-02: Lista las fotografías y videos asociados a un servicio propio.
+ * GET /api/servicios/{idServicio}/multimedia
+ */
+export const listarMultimedia = async (token, idServicio) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/multimedia`,
+    { method: 'GET' },
+    'Error al consultar la multimedia del servicio'
+  );
+};
+
+/**
+ * HU-008 CA-01 o CA-02: Asocia una fotografía o video a un servicio propio.
+ * POST /api/servicios/{idServicio}/multimedia
+ *
+ * @param {{ tipo_archivo: 'foto'|'video', url_archivo: string, orden?: number|null }} datos
+ */
+export const agregarMultimedia = async (token, idServicio, datos) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/multimedia`,
+    { method: 'POST', body: JSON.stringify(datos) },
+    'Error al asociar la fotografía o video'
+  );
+};
+
+/**
+ * HU-008 CA-01 o CA-02: Actualiza una fotografía o video de un servicio propio.
+ * PUT /api/servicios/{idServicio}/multimedia/{idMultimedia}
+ */
+export const actualizarMultimedia = async (token, idServicio, idMultimedia, datos) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/multimedia/${idMultimedia}`,
+    { method: 'PUT', body: JSON.stringify(datos) },
+    'Error al actualizar la fotografía o video'
+  );
+};
+
+/**
+ * HU-008 CA-01 o CA-02: Elimina una fotografía o video de un servicio propio.
+ * DELETE /api/servicios/{idServicio}/multimedia/{idMultimedia}
+ */
+export const eliminarMultimedia = async (token, idServicio, idMultimedia) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/multimedia/${idMultimedia}`,
+    { method: 'DELETE' },
+    'Error al eliminar la fotografía o video'
+  );
+};
+
+/**
+ * HU-008 CA-03: Lista los productos, insumos y equipos de un servicio propio.
+ * GET /api/servicios/{idServicio}/insumos
+ */
+export const listarInsumos = async (token, idServicio) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/insumos`,
+    { method: 'GET' },
+    'Error al consultar los productos, insumos o equipos del servicio'
+  );
+};
+
+/**
+ * HU-008 CA-03: Registra un producto, insumo o equipo en un servicio propio.
+ * POST /api/servicios/{idServicio}/insumos
+ *
+ * @param {{ nombre: string, tipo: 'producto'|'insumo'|'equipo' }} datos
+ */
+export const agregarInsumo = async (token, idServicio, datos) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/insumos`,
+    { method: 'POST', body: JSON.stringify(datos) },
+    'Error al registrar el producto, insumo o equipo'
+  );
+};
+
+/**
+ * HU-008 CA-03: Actualiza un producto, insumo o equipo de un servicio propio.
+ * PUT /api/servicios/{idServicio}/insumos/{idInsumo}
+ */
+export const actualizarInsumo = async (token, idServicio, idInsumo, datos) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/insumos/${idInsumo}`,
+    { method: 'PUT', body: JSON.stringify(datos) },
+    'Error al actualizar el producto, insumo o equipo'
+  );
+};
+
+/**
+ * HU-008 CA-03: Elimina un producto, insumo o equipo de un servicio propio.
+ * DELETE /api/servicios/{idServicio}/insumos/{idInsumo}
+ */
+export const eliminarInsumo = async (token, idServicio, idInsumo) => {
+  return await peticionAutenticada(
+    token,
+    `${API_URL}/${idServicio}/insumos/${idInsumo}`,
+    { method: 'DELETE' },
+    'Error al eliminar el producto, insumo o equipo'
+  );
+};

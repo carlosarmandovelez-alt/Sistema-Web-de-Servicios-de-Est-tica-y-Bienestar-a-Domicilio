@@ -5,15 +5,19 @@ import {
   actualizarZonasAtencion,
 } from '../Servicios/proveedorService';
 import { RegistrarServicio } from './RegistrarServicio';
+import { GestionInformacionComplementaria } from './GestionInformacionComplementaria';
 
 const TABS = {
   PERFIL: 'perfil',
   SERVICIOS: 'servicios',
+  COMPLEMENTARIA: 'complementaria',
 };
 
 export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
 
   const [tabActiva, setTabActiva] = useState(TABS.PERFIL);
+  // Servicio seleccionado desde el catálogo para gestionar su información complementaria (HU-008)
+  const [servicioComplementario, setServicioComplementario] = useState(null);
   // Mensaje de sesion expirada proveniente de RegistrarServicio
   const [mensajeSesionExpirada, setMensajeSesionExpirada] = useState(null);
   // Estado general del perfil cargado desde el backend
@@ -415,6 +419,17 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             Registrar Servicio
           </button>
         </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.COMPLEMENTARIA}
+            className={`nav-link ${tabActiva === TABS.COMPLEMENTARIA ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.COMPLEMENTARIA)}
+          >
+            Información Complementaria
+          </button>
+        </li>
       </ul>
 
       {/* Alerta de sesión expirada */}
@@ -436,6 +451,21 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
       {tabActiva === TABS.SERVICIOS ? (
         <RegistrarServicio
           token={sesion?.token}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+          onGestionarInformacionComplementaria={(servicio) => {
+            setServicioComplementario(servicio);
+            setTabActiva(TABS.COMPLEMENTARIA);
+          }}
+        />
+      ) : tabActiva === TABS.COMPLEMENTARIA ? (
+        <GestionInformacionComplementaria
+          token={sesion?.token}
+          servicioInicial={servicioComplementario}
           onSesionExpirada={(msg) =>
             setMensajeSesionExpirada(
               msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'

@@ -24,8 +24,15 @@ import { CATEGORIAS_PMV } from '../config/categorias';
  *   - token {string}       JWT del proveedor autenticado
  *   - onSesionExpirada {Function}  Callback para manejar sesión vencida / 401
  *   - onCerrarSesion {Function}    Callback para cerrar sesión
+ *   - onGestionarInformacionComplementaria {Function}  Abre la gestión de la HU-008
+ *                                                      para el servicio seleccionado
  */
-export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) => {
+export const RegistrarServicio = ({
+  token,
+  onSesionExpirada,
+  onCerrarSesion,
+  onGestionarInformacionComplementaria,
+}) => {
   const estadoInicial = {
     id_categoria: '',
     nombre: '',
@@ -845,6 +852,18 @@ export const RegistrarServicio = ({ token, onSesionExpirada, onCerrarSesion }) =
                           >
                             Editar
                           </button>
+                          {/* HU-008: Gestionar fotografías, videos, productos e insumos */}
+                          {onGestionarInformacionComplementaria && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-info"
+                              onClick={() => onGestionarInformacionComplementaria(srv)}
+                              disabled={guardando || procesandoEstadoId === srv.id}
+                              title="Asociar fotografías, videos, productos, insumos o equipos"
+                            >
+                              Info. complementaria
+                            </button>
+                          )}
                           {/* Botón Activar / Desactivar (CA-03 y CA-04) */}
                           <button
                             type="button"

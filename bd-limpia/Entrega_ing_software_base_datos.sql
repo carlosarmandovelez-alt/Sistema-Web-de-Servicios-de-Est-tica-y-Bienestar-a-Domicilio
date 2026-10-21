@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS `proyecto_servicios_domicilio`.`servicio_insumo` (
   `id_insumo` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `id_servicio` INT UNSIGNED NOT NULL,
   `nombre` VARCHAR(150) NOT NULL,
-  `tipo` ENUM('insumo', 'equipo') NOT NULL DEFAULT 'insumo',
+  `tipo` ENUM('producto', 'insumo', 'equipo') NOT NULL DEFAULT 'insumo',
   PRIMARY KEY (`id_insumo`),
   CONSTRAINT `fk_insumo_servicio`
     FOREIGN KEY (`id_servicio`)

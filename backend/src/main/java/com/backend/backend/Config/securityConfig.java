@@ -21,6 +21,9 @@ public class securityConfig {
     @Autowired
     private accessDeniedHandlerCustom accessDeniedHandler;
     
+    @Autowired
+    private authenticationEntryPointCustom authenticationEntryPoint;
+    
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -56,6 +59,7 @@ public class securityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler)
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

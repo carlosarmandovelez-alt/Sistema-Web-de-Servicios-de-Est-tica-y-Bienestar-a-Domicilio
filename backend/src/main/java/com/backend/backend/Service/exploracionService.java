@@ -138,7 +138,7 @@ public class exploracionService {
             .orElseThrow(() -> new servicioNoEncontradoException("El servicio no fue encontrado"));
         
         // Multimedia
-        List<servicio_multimediaModel> multimedia = servicioMultimediaRepository.findByServicio(servicio);
+        List<servicio_multimediaModel> multimedia = servicioMultimediaRepository.findByServicioOrdenado(servicio);
         List<MultimediaDTO> multimediaDTO = multimedia.stream()
             .map(m -> new MultimediaDTO(
                 m.getId_multimedia(),
@@ -149,7 +149,7 @@ public class exploracionService {
             .collect(Collectors.toList());
         
         // Insumos
-        List<servicio_insumoModel> insumos = servicioInsumoRepository.findByServicio(servicio);
+        List<servicio_insumoModel> insumos = servicioInsumoRepository.findByServicioOrdenado(servicio);
         List<InsumoDTO> insumosDTO = insumos.stream()
             .map(i -> new InsumoDTO(
                 i.getId_insumo(),
