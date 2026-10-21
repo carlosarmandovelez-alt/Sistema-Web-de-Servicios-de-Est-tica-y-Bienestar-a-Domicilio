@@ -73,4 +73,32 @@ public class globalExceptionHandler {
     error.put("error", ex.getMessage());
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
+
+    @ExceptionHandler(solicitudNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleSolicitudNoEncontrada(solicitudNoEncontradaException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(estadoSolicitudInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleEstadoSolicitudInvalido(estadoSolicitudInvalidoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(accesoDenegadoException.class)
+    public ResponseEntity<Map<String, String>> handleAccesoDenegado(accesoDenegadoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(datosInvalidosException.class)
+    public ResponseEntity<Map<String, String>> handleDatosInvalidos(datosInvalidosException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
 }
