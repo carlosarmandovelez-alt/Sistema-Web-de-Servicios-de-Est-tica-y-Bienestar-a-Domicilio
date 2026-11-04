@@ -5,10 +5,12 @@ import {
   actualizarDireccionPrincipal,
 } from '../Servicios/clienteService';
 import { ExplorarServicios } from './ExplorarServicios';
+import { MisSolicitudes } from './MisSolicitudes';
 
 const TABS = {
   PERFIL: 'perfil',
   EXPLORAR: 'explorar',
+  SOLICITUDES: 'solicitudes',
 };
 
 export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
@@ -391,6 +393,19 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
             Explorar servicios
           </button>
         </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            id="tab-mis-solicitudes"
+            aria-selected={tabActiva === TABS.SOLICITUDES}
+            aria-controls="panel-mis-solicitudes"
+            className={`nav-link ${tabActiva === TABS.SOLICITUDES ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.SOLICITUDES)}
+          >
+            Mis solicitudes
+          </button>
+        </li>
       </ul>
 
       {tabActiva === TABS.EXPLORAR ? (
@@ -399,7 +414,22 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
           role="tabpanel"
           aria-labelledby="tab-explorar-servicios"
         >
-          <ExplorarServicios sesion={sesion} />
+          <ExplorarServicios
+            sesion={sesion}
+            onVerMisSolicitudes={() => setTabActiva(TABS.SOLICITUDES)}
+          />
+        </div>
+      ) : tabActiva === TABS.SOLICITUDES ? (
+        <div
+          id="panel-mis-solicitudes"
+          role="tabpanel"
+          aria-labelledby="tab-mis-solicitudes"
+        >
+          <MisSolicitudes
+            sesion={sesion}
+            onExplorarServicios={() => setTabActiva(TABS.EXPLORAR)}
+            onCerrarSesion={onCerrarSesion}
+          />
         </div>
       ) : (
         <div id="panel-mi-perfil" role="tabpanel" aria-labelledby="tab-mi-perfil">

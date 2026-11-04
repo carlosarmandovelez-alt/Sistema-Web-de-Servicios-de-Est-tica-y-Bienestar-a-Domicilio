@@ -87,7 +87,7 @@ const TarjetaProveedor = ({ proveedor, onVerPerfil }) => {
   );
 };
 
-export const ExplorarServicios = ({ sesion }) => {
+export const ExplorarServicios = ({ sesion, onVerMisSolicitudes }) => {
   // Proveedores disponibles (HU-009 CA-01)
   const [proveedores, setProveedores] = useState([]);
   const [cargandoProveedores, setCargandoProveedores] = useState(true);
@@ -401,6 +401,7 @@ export const ExplorarServicios = ({ sesion }) => {
         sesion={sesion}
         onVolverDetalle={volverADetalleDesdeSolicitud}
         onVolverExploracion={volverAExploracion}
+        onVerMisSolicitudes={onVerMisSolicitudes}
       />
     );
   }

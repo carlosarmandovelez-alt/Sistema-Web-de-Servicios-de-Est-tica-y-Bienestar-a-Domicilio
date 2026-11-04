@@ -7,9 +7,11 @@ import {
 import { RegistrarServicio } from './RegistrarServicio';
 import { GestionInformacionComplementaria } from './GestionInformacionComplementaria';
 import { GestionDisponibilidad } from './GestionDisponibilidad';
+import { SolicitudesRecibidas } from './SolicitudesRecibidas';
 
 const TABS = {
   PERFIL: 'perfil',
+  SOLICITUDES: 'solicitudes',
   SERVICIOS: 'servicios',
   COMPLEMENTARIA: 'complementaria',
   DISPONIBILIDAD: 'disponibilidad',
@@ -381,15 +383,15 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
       <header className="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-4 border-bottom">
         <div>
           <h2 className="h4 mb-1 text-primary fw-bold">Bienestar en Casa</h2>
-          <p className="text-muted small mb-0">Mi Perfil Profesional y Zonas de Atención</p>
+          <p className="text-muted small mb-0">Panel de Proveedor</p>
         </div>
-        <div className="d-flex align-items-center gap-3 mt-2 mt-sm-0">
+        <div className="d-flex flex-wrap align-items-center gap-2 gap-sm-3 mt-2 mt-sm-0">
           <span className="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-3">
             Proveedor: {perfil?.nombre || sesion?.nombre || 'Profesional'} {perfil?.apellido || ''}
           </span>
           <button
             type="button"
-            className="btn btn-outline-danger btn-sm"
+            className="btn btn-outline-danger btn-sm text-nowrap"
             onClick={onCerrarSesion}
           >
             Cerrar sesión
@@ -408,6 +410,17 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             onClick={() => setTabActiva(TABS.PERFIL)}
           >
             Mi Perfil Profesional
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.SOLICITUDES}
+            className={`nav-link ${tabActiva === TABS.SOLICITUDES ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.SOLICITUDES)}
+          >
+            Solicitudes recibidas
           </button>
         </li>
         <li className="nav-item" role="presentation">
@@ -461,7 +474,12 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
         </div>
       )}
 
-      {tabActiva === TABS.SERVICIOS ? (
+      {tabActiva === TABS.SOLICITUDES ? (
+        <SolicitudesRecibidas
+          sesion={sesion}
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.SERVICIOS ? (
         <RegistrarServicio
           token={sesion?.token}
           onSesionExpirada={(msg) =>

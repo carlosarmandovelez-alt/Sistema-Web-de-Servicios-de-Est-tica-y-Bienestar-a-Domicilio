@@ -104,6 +104,7 @@ const ConfirmacionSolicitud = ({
   onVolverDetalle,
   onVolverExploracion,
   onCrearOtra,
+  onVerMisSolicitudes,
 }) => {
   const inicio = parsearLocalDateTime(solicitud?.fecha_hora_solicitada);
   const duracion = Number(solicitud?.duracion_snapshot_minutos);
@@ -215,8 +216,21 @@ const ConfirmacionSolicitud = ({
       </div>
 
       <div className="d-flex flex-wrap gap-2">
+        {onVerMisSolicitudes && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onVerMisSolicitudes}
+          >
+            Ver mis solicitudes
+          </button>
+        )}
         {onVolverExploracion && (
-          <button type="button" className="btn btn-primary" onClick={onVolverExploracion}>
+          <button
+            type="button"
+            className={onVerMisSolicitudes ? 'btn btn-outline-primary' : 'btn btn-primary'}
+            onClick={onVolverExploracion}
+          >
             Volver a la exploración
           </button>
         )}
@@ -234,6 +248,7 @@ const FormularioSolicitud = ({
   sesion,
   onVolverDetalle,
   onVolverExploracion,
+  onVerMisSolicitudes,
 }) => {
   const [estado, setEstado] = useState({
     cargando: true,
@@ -732,6 +747,7 @@ const FormularioSolicitud = ({
         onVolverDetalle={onVolverDetalle}
         onVolverExploracion={onVolverExploracion}
         onCrearOtra={crearOtraSolicitud}
+        onVerMisSolicitudes={onVerMisSolicitudes}
       />
     );
   }
@@ -1300,6 +1316,7 @@ export const SolicitudServicio = ({
   sesion,
   onVolverDetalle,
   onVolverExploracion,
+  onVerMisSolicitudes,
 }) => {
   if (!sesion?.token || sesion?.rol !== 'cliente') {
     return (
@@ -1318,6 +1335,7 @@ export const SolicitudServicio = ({
       sesion={sesion}
       onVolverDetalle={onVolverDetalle}
       onVolverExploracion={onVolverExploracion}
+      onVerMisSolicitudes={onVerMisSolicitudes}
     />
   );
 };

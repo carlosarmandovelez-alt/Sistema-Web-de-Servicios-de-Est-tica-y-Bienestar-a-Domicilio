@@ -443,4 +443,21 @@ describe('HU-012: formulario de creación de solicitud', () => {
     expect(consultarPerfilCliente).not.toHaveBeenCalled();
     expect(crearSolicitud).not.toHaveBeenCalled();
   });
+
+  test('ofrece ir a Mis solicitudes después de crear, sin duplicar la creación', async () => {
+    const onVerMisSolicitudes = jest.fn();
+
+    renderizar({ onVerMisSolicitudes });
+    await esperarFormulario();
+    completarFormulario();
+    confirmar();
+
+    const boton = await screen.findByRole('button', {
+      name: 'Ver mis solicitudes',
+    });
+    fireEvent.click(boton);
+
+    expect(onVerMisSolicitudes).toHaveBeenCalledTimes(1);
+    expect(crearSolicitud).toHaveBeenCalledTimes(1);
+  });
 });
