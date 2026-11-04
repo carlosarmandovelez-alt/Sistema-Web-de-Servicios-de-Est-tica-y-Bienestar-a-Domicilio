@@ -6,11 +6,13 @@ import {
 } from '../Servicios/proveedorService';
 import { RegistrarServicio } from './RegistrarServicio';
 import { GestionInformacionComplementaria } from './GestionInformacionComplementaria';
+import { GestionDisponibilidad } from './GestionDisponibilidad';
 
 const TABS = {
   PERFIL: 'perfil',
   SERVICIOS: 'servicios',
   COMPLEMENTARIA: 'complementaria',
+  DISPONIBILIDAD: 'disponibilidad',
 };
 
 export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
@@ -430,6 +432,17 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             Información Complementaria
           </button>
         </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.DISPONIBILIDAD}
+            className={`nav-link ${tabActiva === TABS.DISPONIBILIDAD ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.DISPONIBILIDAD)}
+          >
+            Disponibilidad
+          </button>
+        </li>
       </ul>
 
       {/* Alerta de sesión expirada */}
@@ -466,6 +479,16 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
         <GestionInformacionComplementaria
           token={sesion?.token}
           servicioInicial={servicioComplementario}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.DISPONIBILIDAD ? (
+        <GestionDisponibilidad
+          token={sesion?.token}
           onSesionExpirada={(msg) =>
             setMensajeSesionExpirada(
               msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'

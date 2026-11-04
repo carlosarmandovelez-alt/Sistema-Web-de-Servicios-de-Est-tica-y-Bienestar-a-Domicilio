@@ -94,4 +94,18 @@ public class globalExceptionHandler {
         error.put("error", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
+
+    @ExceptionHandler(multimediaNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleMultimediaNoEncontrada(multimediaNoEncontradaException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(insumoNoEncontradoException.class)
+    public ResponseEntity<Map<String, String>> handleInsumoNoEncontrado(insumoNoEncontradoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
 }

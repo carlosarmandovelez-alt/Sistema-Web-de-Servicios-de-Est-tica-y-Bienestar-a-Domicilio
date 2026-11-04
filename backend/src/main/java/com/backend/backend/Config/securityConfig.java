@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -26,8 +27,12 @@ public class securityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
+                // Preflight CORS
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                 // HU-001, HU-002, HU-003 (Públicos)
                 .requestMatchers("/api/auth/**").permitAll()
                 
@@ -50,6 +55,9 @@ public class securityConfig {
                 .requestMatchers("/api/solicitudes/recibidas/**").hasRole("proveedor")
                 .requestMatchers("/api/solicitudes/mis-solicitudes/**").hasRole("cliente")
                 .requestMatchers(HttpMethod.POST, "/api/solicitudes").hasRole("cliente")
+
+                // Categorías (público, usado por exploración y formularios)
+                .requestMatchers("/api/categorias/**").permitAll()
                 
                 // Errores
                 .requestMatchers("/error").permitAll()
