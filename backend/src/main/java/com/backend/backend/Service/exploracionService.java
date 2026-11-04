@@ -38,7 +38,7 @@ public class exploracionService {
     // HU-009: Exploración de proveedores y servicios
     // ============================================
     
-    // Consultar proveedores disponibles
+    // CA-01: Consultar proveedores disponibles
     public List<proveedorListadoDTO> consultarProveedores() {
         List<proveedorModel> proveedores = proveedorRepository.findProveedoresConServiciosActivos();
         
@@ -58,7 +58,7 @@ public class exploracionService {
         return convertirLista(servicios);
     }
     
-    // Búsqueda por categoría
+    // CA-02: Búsqueda por categoría
     public List<servicioListadoDTO> buscarPorCategoria(Integer idCategoria) {
         List<servicioModel> servicios = servicioRepository.buscarPorCategoriaYEstado(
             estadoServicioModel.activo, idCategoria);
@@ -138,7 +138,7 @@ public class exploracionService {
             .orElseThrow(() -> new servicioNoEncontradoException("El servicio no fue encontrado"));
         
         // Multimedia
-        List<servicio_multimediaModel> multimedia = servicioMultimediaRepository.findByServicioOrdenado(servicio);
+        List<servicio_multimediaModel> multimedia = servicioMultimediaRepository.findByServicio(servicio);
         List<MultimediaDTO> multimediaDTO = multimedia.stream()
             .map(m -> new MultimediaDTO(
                 m.getId_multimedia(),
@@ -149,7 +149,7 @@ public class exploracionService {
             .collect(Collectors.toList());
         
         // Insumos
-        List<servicio_insumoModel> insumos = servicioInsumoRepository.findByServicioOrdenado(servicio);
+        List<servicio_insumoModel> insumos = servicioInsumoRepository.findByServicio(servicio);
         List<InsumoDTO> insumosDTO = insumos.stream()
             .map(i -> new InsumoDTO(
                 i.getId_insumo(),

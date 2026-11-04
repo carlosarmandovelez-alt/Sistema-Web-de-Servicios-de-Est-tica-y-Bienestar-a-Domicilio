@@ -18,13 +18,11 @@ public class servicio_insumoModel {
     private Integer id_insumo;
     
     @ManyToOne
-    @JoinColumn(name = "id_servicio", nullable = false)
+    @JoinColumn(name = "id_servicio")
     private servicioModel servicio;
     
-    @Column(name = "nombre", nullable = false, length = 150)
     private String nombre;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo", nullable = false, length = 20)
     private tipoInsumoModel tipo;
 }

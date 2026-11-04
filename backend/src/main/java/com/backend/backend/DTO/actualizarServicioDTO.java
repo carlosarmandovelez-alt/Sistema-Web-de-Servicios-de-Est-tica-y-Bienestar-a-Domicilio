@@ -1,6 +1,5 @@
 package com.backend.backend.DTO;
 
-import com.backend.backend.Model.enums.estadoServicioModel;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,7 +19,6 @@ public class actualizarServicioDTO {
     @Size(max = 150, message = "El nombre no puede superar los 150 caracteres")
     private String nombre;
     
-    @NotBlank(message = "La descripción del servicio es obligatoria")
     @Size(max = 2000, message = "La descripción no puede superar los 2000 caracteres")
     private String descripcion;
     
@@ -32,7 +30,4 @@ public class actualizarServicioDTO {
     @DecimalMin(value = "0.01", message = "El precio debe ser mayor a 0")
     @Digits(integer = 8, fraction = 2, message = "El precio debe tener máximo 8 enteros y 2 decimales")
     private BigDecimal precio;
-    
-    private estadoServicioModel estado;
 }
-

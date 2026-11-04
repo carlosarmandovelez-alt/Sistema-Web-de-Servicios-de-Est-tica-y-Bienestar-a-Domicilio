@@ -18,16 +18,13 @@ public class servicio_multimediaModel {
     private Integer id_multimedia;
     
     @ManyToOne
-    @JoinColumn(name = "id_servicio", nullable = false)
+    @JoinColumn(name = "id_servicio")
     private servicioModel servicio;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_archivo", nullable = false, length = 20)
     private tipoArchivoModel tipo_archivo;
     
-    @Column(name = "url_archivo", nullable = false, length = 500)
     private String url_archivo;
     
-    @Column(name = "orden", nullable = false)
     private Integer orden;
 }
