@@ -37,9 +37,6 @@ public class securityConfig {
                 // HU-005 (Proveedor)
                 .requestMatchers("/api/proveedores/**").hasRole("proveedor")
                 
-                // Catálogo de categorías (público)
-                .requestMatchers("/api/categorias/**").permitAll()
-
                 // HU-006, HU-007, HU-008 (Proveedor)
                 .requestMatchers("/api/servicios/**").hasRole("proveedor")
                 
