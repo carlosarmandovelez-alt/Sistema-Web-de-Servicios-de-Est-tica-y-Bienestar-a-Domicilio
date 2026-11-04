@@ -1,14 +1,41 @@
 import React, { useState } from 'react';
 import { PerfilCliente } from './PerfilCliente';
 import { SolicitudesCliente } from './SolicitudesCliente';
+import { ExplorarServicios } from './ExplorarServicios';
+import { CrearSolicitud } from './CrearSolicitud';
 
 const TABS = [
+  { valor: 'explorar', texto: 'Explorar servicios' },
+  { valor: 'nueva', texto: 'Nueva solicitud' },
   { valor: 'solicitudes', texto: 'Mis solicitudes' },
   { valor: 'perfil', texto: 'Mi perfil' },
 ];
 
 export const PanelCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
   const [vista, setVista] = useState('solicitudes');
+  const [solicitudInicial, setSolicitudInicial] = useState(null);
+  const [aviso, setAviso] = useState(null);
+
+  const cambiarVista = (nuevaVista) => {
+    setVista(nuevaVista);
+    if (nuevaVista === 'nueva') {
+      setSolicitudInicial(null);
+    }
+  };
+
+  const solicitarServicio = (servicio, proveedor) => {
+    setSolicitudInicial({ ...servicio, nombre_proveedor: proveedor?.nombre || servicio.nombre_proveedor });
+    setAviso(null);
+    setVista('nueva');
+  };
+
+  const handleSolicitudCreada = (solicitud) => {
+    setAviso(
+      `Tu solicitud para "${solicitud.nombre_servicio_snapshot}" fue creada correctamente. Puedes seguir su estado en "Mis solicitudes".`
+    );
+    setSolicitudInicial(null);
+    setVista('solicitudes');
+  };
 
   return (
     <div className="container py-4" style={{ maxWidth: '1040px' }}>
@@ -33,13 +60,31 @@ export const PanelCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) => 
             <button
               type="button"
               className={`nav-link ${vista === tab.valor ? 'active' : ''}`}
-              onClick={() => setVista(tab.valor)}
+              onClick={() => cambiarVista(tab.valor)}
             >
               {tab.texto}
             </button>
           </li>
         ))}
       </ul>
+
+      {aviso && (
+        <div className="alert alert-success alert-dismissible fade show" role="status">
+          {aviso}
+          <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setAviso(null)} />
+        </div>
+      )}
+
+      {vista === 'explorar' && <ExplorarServicios onSolicitar={solicitarServicio} />}
+
+      {vista === 'nueva' && (
+        <CrearSolicitud
+          sesion={sesion}
+          servicioInicial={solicitudInicial}
+          onCreada={handleSolicitudCreada}
+          onCancelar={() => cambiarVista('explorar')}
+        />
+      )}
 
       {vista === 'solicitudes' && <SolicitudesCliente sesion={sesion} onCerrarSesion={onCerrarSesion} />}
 

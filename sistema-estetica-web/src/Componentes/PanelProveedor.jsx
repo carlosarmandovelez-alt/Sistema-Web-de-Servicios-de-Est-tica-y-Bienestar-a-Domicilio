@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { PerfilProveedor } from './PerfilProveedor';
 import { SolicitudesProveedor } from './SolicitudesProveedor';
 import { AgendaProveedor } from './AgendaProveedor';
+import { CatalogoProveedor } from './CatalogoProveedor';
+import { DisponibilidadProveedor } from './DisponibilidadProveedor';
 
 const TABS = [
   { valor: 'solicitudes', texto: 'Solicitudes recibidas' },
   { valor: 'agenda', texto: 'Mi agenda' },
+  { valor: 'catalogo', texto: 'Mi catálogo' },
+  { valor: 'disponibilidad', texto: 'Mi disponibilidad' },
   { valor: 'perfil', texto: 'Mi perfil' },
 ];
 
@@ -46,6 +50,10 @@ export const PanelProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) =
       {vista === 'solicitudes' && <SolicitudesProveedor sesion={sesion} onCerrarSesion={onCerrarSesion} />}
 
       {vista === 'agenda' && <AgendaProveedor sesion={sesion} onCerrarSesion={onCerrarSesion} />}
+
+      {vista === 'catalogo' && <CatalogoProveedor sesion={sesion} />}
+
+      {vista === 'disponibilidad' && <DisponibilidadProveedor sesion={sesion} />}
 
       {vista === 'perfil' && (
         <PerfilProveedor

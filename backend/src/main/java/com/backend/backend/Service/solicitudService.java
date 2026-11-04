@@ -7,13 +7,18 @@ import com.backend.backend.Exception.estadoSolicitudInvalidoException;
 import com.backend.backend.Exception.servicioNoEncontradoException;
 import com.backend.backend.Exception.solicitudNoEncontradaException;
 import com.backend.backend.Model.clienteModel;
+import com.backend.backend.Model.disponibilidadModel;
+import com.backend.backend.Model.enums.diaSemanaModel;
 import com.backend.backend.Model.enums.estadoServicioModel;
 import com.backend.backend.Model.enums.estadoSolicitudModel;
+import com.backend.backend.Model.periodoNoDisponibleModel;
 import com.backend.backend.Model.proveedorModel;
 import com.backend.backend.Model.servicioModel;
 import com.backend.backend.Model.solicitud_reservaModel;
 import com.backend.backend.Model.usuarioModel;
 import com.backend.backend.Repository.clienteRepository;
+import com.backend.backend.Repository.disponibilidadRepository;
+import com.backend.backend.Repository.periodoNoDisponibleRepository;
 import com.backend.backend.Repository.proveedorRepository;
 import com.backend.backend.Repository.servicioRepository;
 import com.backend.backend.Repository.solicitudReservaRepository;
@@ -22,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -44,6 +51,12 @@ public class solicitudService {
     @Autowired
     private proveedorRepository proveedorRepository;
 
+    @Autowired
+    private disponibilidadRepository disponibilidadRepository;
+
+    @Autowired
+    private periodoNoDisponibleRepository periodoNoDisponibleRepository;
+
     // ============================================
     // HU-012: Crear solicitud (soporte para HU-015 a HU-019)
     // ============================================
@@ -57,6 +70,9 @@ public class solicitudService {
         if (servicio.getEstado() != estadoServicioModel.activo) {
             throw new datosInvalidosException("El servicio no se encuentra disponible");
         }
+
+        validarDisponibilidadYPeriodos(
+            servicio.getProveedor(), dto.getFecha_hora_solicitada(), servicio.getDuracion_minutos());
 
         solicitud_reservaModel solicitud = new solicitud_reservaModel();
         solicitud.setServicio(servicio);
@@ -127,6 +143,14 @@ public class solicitudService {
 
         switch (dto.getAccion()) {
             case aceptar -> {
+                validarDisponibilidadYPeriodos(
+                    proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
+                validarSinSolapamiento(
+                    proveedor,
+                    solicitud.getFecha_hora_solicitada(),
+                    solicitud.getDuracion_snapshot_minutos(),
+                    solicitud.getId_solicitud());
+
                 solicitud.setEstado(estadoSolicitudModel.aceptada);
                 solicitud.setFecha_hora_propuesta(null);
                 solicitud.setMotivo_rechazo_cancelacion(null);
@@ -146,6 +170,8 @@ public class solicitudService {
                 if (!dto.getFecha_hora_propuesta().isAfter(LocalDateTime.now())) {
                     throw new datosInvalidosException("La fecha y hora propuesta debe ser en el futuro");
                 }
+                validarDisponibilidadYPeriodos(
+                    proveedor, dto.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
                 solicitud.setEstado(estadoSolicitudModel.sugerida);
                 solicitud.setFecha_hora_propuesta(dto.getFecha_hora_propuesta());
                 solicitud.setMotivo_rechazo_cancelacion(null);
@@ -175,6 +201,16 @@ public class solicitudService {
 
         switch (dto.getAccion()) {
             case aceptar -> {
+                validarDisponibilidadYPeriodos(
+                    solicitud.getProveedor(),
+                    solicitud.getFecha_hora_propuesta(),
+                    solicitud.getDuracion_snapshot_minutos());
+                validarSinSolapamiento(
+                    solicitud.getProveedor(),
+                    solicitud.getFecha_hora_propuesta(),
+                    solicitud.getDuracion_snapshot_minutos(),
+                    solicitud.getId_solicitud());
+
                 solicitud.setFecha_hora_solicitada(solicitud.getFecha_hora_propuesta());
                 solicitud.setFecha_hora_propuesta(null);
                 solicitud.setEstado(estadoSolicitudModel.aceptada);
@@ -273,6 +309,89 @@ public class solicitudService {
     // ============================================
     // Auxiliares
     // ============================================
+    private void validarDisponibilidadYPeriodos(
+            proveedorModel proveedor, LocalDateTime inicio, Integer duracionMinutos) {
+
+        if (inicio == null || duracionMinutos == null) {
+            return;
+        }
+
+        validarFranjasDisponibles(proveedor, inicio, duracionMinutos);
+        validarPeriodosNoDisponibles(proveedor, inicio);
+    }
+
+    private void validarFranjasDisponibles(
+            proveedorModel proveedor, LocalDateTime inicio, Integer duracionMinutos) {
+
+        List<disponibilidadModel> franjas = disponibilidadRepository.findByProveedor(proveedor);
+
+        if (franjas.isEmpty()) {
+            return;
+        }
+
+        diaSemanaModel dia = convertirDiaSemana(inicio.getDayOfWeek());
+        LocalDateTime fin = inicio.plusMinutes(duracionMinutos);
+
+        boolean atiende = franjas.stream()
+            .filter(franja -> franja.getDia_semana() == dia)
+            .anyMatch(franja ->
+                !inicio.toLocalTime().isBefore(franja.getHora_inicio())
+                    && !fin.toLocalTime().isAfter(franja.getHora_fin())
+                    && fin.toLocalDate().equals(inicio.toLocalDate()));
+
+        if (!atiende) {
+            throw new datosInvalidosException(
+                "El proveedor no tiene disponibilidad para la fecha y hora seleccionadas");
+        }
+    }
+
+    private void validarPeriodosNoDisponibles(proveedorModel proveedor, LocalDateTime inicio) {
+        LocalDate fecha = inicio.toLocalDate();
+
+        boolean bloqueado = periodoNoDisponibleRepository.findByProveedor(proveedor).stream()
+            .anyMatch(periodo ->
+                !fecha.isBefore(periodo.getFecha_inicio()) && !fecha.isAfter(periodo.getFecha_fin()));
+
+        if (bloqueado) {
+            throw new datosInvalidosException(
+                "El proveedor no está disponible en la fecha seleccionada");
+        }
+    }
+
+    private void validarSinSolapamiento(
+            proveedorModel proveedor, LocalDateTime inicio, Integer duracionMinutos, Integer idSolicitudExcluir) {
+
+        LocalDateTime fin = inicio.plusMinutes(duracionMinutos);
+
+        boolean ocupado = solicitudReservaRepository.agenda(proveedor, estadoSolicitudModel.aceptada).stream()
+            .filter(existente -> idSolicitudExcluir == null
+                || !existente.getId_solicitud().equals(idSolicitudExcluir))
+            .anyMatch(existente -> {
+                LocalDateTime inicioExistente = existente.getFecha_hora_solicitada();
+                LocalDateTime finExistente =
+                    inicioExistente.plusMinutes(existente.getDuracion_snapshot_minutos());
+
+                return inicio.isBefore(finExistente) && inicioExistente.isBefore(fin);
+            });
+
+        if (ocupado) {
+            throw new datosInvalidosException(
+                "El proveedor ya tiene una reserva aceptada en ese horario");
+        }
+    }
+
+    private diaSemanaModel convertirDiaSemana(DayOfWeek dayOfWeek) {
+        return switch (dayOfWeek) {
+            case MONDAY -> diaSemanaModel.lunes;
+            case TUESDAY -> diaSemanaModel.martes;
+            case WEDNESDAY -> diaSemanaModel.miercoles;
+            case THURSDAY -> diaSemanaModel.jueves;
+            case FRIDAY -> diaSemanaModel.viernes;
+            case SATURDAY -> diaSemanaModel.sabado;
+            case SUNDAY -> diaSemanaModel.domingo;
+        };
+    }
+
     private usuarioModel obtenerUsuario(String email) {
         return usuarioRepository.findByEmail(email)
             .orElseThrow(() -> new accesoDenegadoException("Usuario no encontrado"));

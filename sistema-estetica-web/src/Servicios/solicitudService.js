@@ -65,6 +65,14 @@ const solicitar = async (token, url, opciones, fallbackMensaje) => {
   return response.status === 204 ? null : await response.json();
 };
 
+export const crearSolicitud = (token, datos) =>
+  solicitar(
+    token,
+    API_URL,
+    { method: 'POST', body: JSON.stringify(datos) },
+    'Error al crear la solicitud'
+  );
+
 export const listarSolicitudesCliente = (token) =>
   solicitar(token, `${API_URL}/mis-solicitudes`, { method: 'GET' }, 'Error al consultar tus solicitudes');
 
