@@ -1,22 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { obtenerCategorias } from '../Servicios/servicioService';
 import {
   obtenerProveedoresDisponibles,
   obtenerServiciosDisponibles,
   buscarServiciosPorCategoria,
   buscarServiciosPorNombre,
-  consultarProveedorPorId,
 } from '../Servicios/exploracionService';
+import {
+  AlertaError,
+  EstadoVacio,
+  IndicadorCarga,
+  TarjetaServicio,
+  obtenerIniciales,
+} from './ExploracionComun';
+import { PerfilProveedorPublico } from './PerfilProveedorPublico';
+import { DetalleServicio } from './DetalleServicio';
 
 /**
- * ExplorarServicios (HU-009)
+ * ExplorarServicios (HU-009) con navegación de HU-010.
  *
  * Permite al Cliente:
- *   - CA-01: consultar los proveedores disponibles.
- *   - CA-02: filtrar los servicios activos por categoría.
- *   - CA-03: buscar servicios activos por nombre o parte del nombre.
- *   - CA-04: recibir un estado vacío claro cuando no hay coincidencias y
- *            modificar los criterios sin abandonar la pantalla.
+ *   - Consultar proveedores y buscar servicios activos (HU-009).
+ *   - Abrir el perfil público de un proveedor (HU-010).
+ *   - Abrir el detalle de un servicio y regresar conservando la búsqueda.
  *
  * Todos los datos provienen de los endpoints públicos de /api/exploracion y
  * /api/categorias. No se generan proveedores, servicios ni categorías de ejemplo.
@@ -24,199 +30,14 @@ import {
 
 const RETRASO_BUSQUEDA_MS = 350;
 
-const formatearPrecio = (precio) => {
-  if (precio === null || precio === undefined || precio === '') return null;
-  const numero = Number(precio);
-  if (!Number.isFinite(numero)) return null;
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 2,
-  }).format(numero);
-};
-
-const formatearDuracion = (duracion) => {
-  const minutos = Number(duracion);
-  if (!Number.isFinite(minutos) || minutos <= 0) return null;
-  return `${minutos} min`;
-};
-
-const obtenerIniciales = (nombre, apellido) => {
-  const partes = [nombre, apellido].filter(Boolean);
-  if (partes.length === 0) return 'P';
-  return partes
-    .map((parte) => String(parte).trim().charAt(0))
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-};
-
-const obtenerMensajeError = (err, fallback) => {
-  if (err && typeof err.message === 'string' && err.message.trim()) {
-    return err.message;
-  }
-  return fallback;
-};
-
-const IndicadorCarga = ({ texto }) => (
-  <div className="d-flex align-items-center gap-2 text-muted py-3" role="status" aria-live="polite">
-    <span className="spinner-border spinner-border-sm text-primary" aria-hidden="true" />
-    <span>{texto}</span>
-  </div>
-);
-
-const AlertaError = ({ mensaje, onReintentar }) => (
-  <div
-    className="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-2"
-    role="alert"
-  >
-    <span>{mensaje}</span>
-    {onReintentar && (
-      <button type="button" className="btn btn-sm btn-outline-danger" onClick={onReintentar}>
-        Reintentar
-      </button>
-    )}
-  </div>
-);
-
-const EstadoVacio = ({ titulo, children }) => (
-  <div className="text-center py-5 px-3 border rounded bg-light" role="status">
-    <p className="fw-semibold mb-2">{titulo}</p>
-    {children}
-  </div>
-);
-
-const TarjetaServicio = ({ servicio, mostrarProveedor = true }) => {
-  const precio = formatearPrecio(servicio?.precio);
-  const duracion = formatearDuracion(servicio?.duracion_minutos);
-  const nombre = servicio?.nombre || 'Servicio sin nombre';
-
-  return (
-    <article className="card h-100 shadow-sm border-0" aria-label={`Servicio ${nombre}`}>
-      <div className="card-body d-flex flex-column">
-        <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-          <h4 className="h6 fw-semibold text-dark mb-0">{nombre}</h4>
-          {servicio?.categoria && (
-            <span className="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">
-              {servicio.categoria}
-            </span>
-          )}
-        </div>
-
-        {servicio?.descripcion && (
-          <p className="small text-secondary mb-3" style={{ whiteSpace: 'pre-wrap' }}>
-            {servicio.descripcion}
-          </p>
-        )}
-
-        <dl className="row g-1 small mb-3 mt-auto">
-          {duracion && (
-            <>
-              <dt className="col-5 text-muted fw-normal mb-0">Duración estimada</dt>
-              <dd className="col-7 mb-0 text-dark">{duracion}</dd>
-            </>
-          )}
-          {precio && (
-            <>
-              <dt className="col-5 text-muted fw-normal mb-0">Precio</dt>
-              <dd className="col-7 mb-0 fw-semibold text-primary">{precio}</dd>
-            </>
-          )}
-          {mostrarProveedor && servicio?.nombre_proveedor && (
-            <>
-              <dt className="col-5 text-muted fw-normal mb-0">Proveedor</dt>
-              <dd className="col-7 mb-0 text-dark">{servicio.nombre_proveedor}</dd>
-            </>
-          )}
-        </dl>
-      </div>
-    </article>
-  );
-};
-
-const ContenidoDetalleProveedor = ({ estado }) => {
-  if (!estado || estado.cargando) {
-    return <IndicadorCarga texto="Cargando información del proveedor..." />;
-  }
-
-  if (estado.error) {
-    return <AlertaError mensaje={estado.error} />;
-  }
-
-  const detalle = estado.data;
-  if (!detalle) return null;
-
-  const zonas = Array.isArray(detalle.zonasAtencion) ? detalle.zonasAtencion : [];
-  const catalogo = Array.isArray(detalle.catalogo) ? detalle.catalogo : [];
-
-  return (
-    <div className="border-top pt-3 mt-3">
-      {detalle.perfil_profesional && (
-        <div className="mb-3">
-          <h5 className="h6 fw-semibold text-dark">Perfil profesional</h5>
-          <p className="small text-secondary mb-0" style={{ whiteSpace: 'pre-wrap' }}>
-            {detalle.perfil_profesional}
-          </p>
-        </div>
-      )}
-
-      <div className="mb-3">
-        <h5 className="h6 fw-semibold text-dark">Zonas de atención</h5>
-        {zonas.length > 0 ? (
-          <>
-            <ul className="list-inline mb-2">
-              {zonas.map((zona, index) => (
-                <li
-                  className="list-inline-item badge bg-light text-dark border me-1 mb-1"
-                  key={`${zona.ciudad || 'ciudad'}-${zona.barrio_sector || 'sector'}-${index}`}
-                >
-                  {zona.ciudad || 'Ciudad no especificada'}
-                  {zona.barrio_sector ? ` · ${zona.barrio_sector}` : ''}
-                </li>
-              ))}
-            </ul>
-            <p className="small text-muted mb-0">
-              Las zonas son información orientativa y no garantizan cobertura para una dirección
-              específica.
-            </p>
-          </>
-        ) : (
-          <p className="small text-muted mb-0">El proveedor no tiene zonas de atención registradas.</p>
-        )}
-      </div>
-
-      <div>
-        <h5 className="h6 fw-semibold text-dark">Servicios ofrecidos</h5>
-        {catalogo.length > 0 ? (
-          <div className="row g-3">
-            {catalogo.map((servicio) => (
-              <div className="col-12 col-md-6" key={servicio.id}>
-                <TarjetaServicio servicio={servicio} mostrarProveedor={false} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="small text-muted mb-0">
-            Este proveedor no tiene servicios activos disponibles en este momento.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const TarjetaProveedor = ({
-  proveedor,
-  expandido,
-  estadoDetalle,
-  onAlternar,
-  onReintentarDetalle,
-}) => {
+const TarjetaProveedor = ({ proveedor, onVerPerfil }) => {
   const nombreCompleto = [proveedor?.nombre, proveedor?.apellido].filter(Boolean).join(' ');
-  const idDetalle = `detalle-proveedor-${proveedor?.id}`;
 
   return (
-    <article className="card h-100 shadow-sm border-0" aria-label={`Proveedor ${nombreCompleto}`}>
+    <article
+      className="card h-100 shadow-sm border-0"
+      aria-label={`Proveedor ${nombreCompleto || 'sin nombre'}`}
+    >
       <div className="card-body d-flex flex-column">
         <div className="d-flex align-items-center gap-3 mb-3">
           <span
@@ -227,7 +48,9 @@ const TarjetaProveedor = ({
             {obtenerIniciales(proveedor?.nombre, proveedor?.apellido)}
           </span>
           <div>
-            <h4 className="h6 fw-semibold text-dark mb-1">{nombreCompleto || 'Proveedor'}</h4>
+            <h4 className="h6 fw-semibold text-dark mb-1">
+              {nombreCompleto || 'Proveedor'}
+            </h4>
             <span className="badge bg-light text-dark border">Proveedor de servicios</span>
           </div>
         </div>
@@ -254,46 +77,29 @@ const TarjetaProveedor = ({
         <button
           type="button"
           className="btn btn-outline-primary btn-sm align-self-start mt-auto"
-          onClick={() => onAlternar(proveedor.id)}
-          aria-expanded={expandido}
-          aria-controls={idDetalle}
+          onClick={() => onVerPerfil(proveedor.id)}
         >
-          {expandido ? 'Ocultar información' : 'Ver información y servicios'}
+          Ver perfil y catálogo
         </button>
-
-        {expandido && (
-          <div id={idDetalle}>
-            <ContenidoDetalleProveedor estado={estadoDetalle} />
-            {estadoDetalle?.error && onReintentarDetalle && (
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-danger mt-2"
-                onClick={() => onReintentarDetalle(proveedor.id)}
-              >
-                Reintentar información del proveedor
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </article>
   );
 };
 
 export const ExplorarServicios = () => {
-  // Proveedores disponibles (CA-01)
+  // Proveedores disponibles (HU-009 CA-01)
   const [proveedores, setProveedores] = useState([]);
   const [cargandoProveedores, setCargandoProveedores] = useState(true);
   const [errorProveedores, setErrorProveedores] = useState(null);
   const [recargaProveedores, setRecargaProveedores] = useState(0);
 
-  // Categorías reales para el filtro (CA-02)
+  // Categorías reales para el filtro (HU-009 CA-02)
   const [categorias, setCategorias] = useState([]);
   const [cargandoCategorias, setCargandoCategorias] = useState(true);
   const [errorCategorias, setErrorCategorias] = useState(null);
   const [recargaCategorias, setRecargaCategorias] = useState(0);
 
-  // Servicios activos y criterios de búsqueda (CA-02, CA-03, CA-04)
+  // Servicios activos y criterios de búsqueda (HU-009 CA-02, CA-03, CA-04)
   const [servicios, setServicios] = useState([]);
   const [cargandoServicios, setCargandoServicios] = useState(true);
   const [errorServicios, setErrorServicios] = useState(null);
@@ -303,20 +109,11 @@ export const ExplorarServicios = () => {
   const [criterioBusqueda, setCriterioBusqueda] = useState('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
 
-  // Detalle ampliado de proveedores (se consulta solo cuando el Cliente lo solicita)
-  const [proveedorExpandido, setProveedorExpandido] = useState(null);
-  const [detallesProveedor, setDetallesProveedor] = useState({});
+  // Navegación interna de HU-010. Al cambiar de vista, el estado de búsqueda
+  // permanece en este componente para recuperarlo al regresar.
+  const [vista, setVista] = useState({ tipo: 'exploracion' });
 
   const solicitudServiciosRef = useRef(0);
-  const detallesProveedorRef = useRef({});
-  const montadoRef = useRef(true);
-
-  useEffect(() => {
-    montadoRef.current = true;
-    return () => {
-      montadoRef.current = false;
-    };
-  }, []);
 
   const categoriaActual = useMemo(
     () =>
@@ -327,6 +124,48 @@ export const ExplorarServicios = () => {
   );
 
   const hayCriterios = Boolean(criterioBusqueda || categoriaActual);
+
+  const irAlInicio = () => {
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      } catch {
+        // En entornos de prueba algunos navegadores simulados no aceptan opciones.
+      }
+    }
+  };
+
+  const abrirPerfilProveedor = (idProveedor) => {
+    setVista({ tipo: 'proveedor', idProveedor });
+    irAlInicio();
+  };
+
+  const abrirDetalleServicio = (idServicio, idProveedorServicio) => {
+    setVista({
+      tipo: 'servicio',
+      idServicio,
+      idProveedor: idProveedorServicio ?? null,
+    });
+    irAlInicio();
+  };
+
+  const volverAExploracion = () => {
+    setVista({ tipo: 'exploracion' });
+    irAlInicio();
+  };
+
+  const volverAProveedor = () => {
+    if (vista.idProveedor) {
+      setVista({ tipo: 'proveedor', idProveedor: vista.idProveedor });
+      irAlInicio();
+    } else {
+      volverAExploracion();
+    }
+  };
+
+  const abrirServicioDesdePerfil = (servicio) => {
+    abrirDetalleServicio(servicio.id, vista.idProveedor ?? servicio.id_proveedor);
+  };
 
   // Aplica un pequeño retraso para no lanzar una petición por cada tecla.
   useEffect(() => {
@@ -367,7 +206,7 @@ export const ExplorarServicios = () => {
         if (cancelado) return;
         setCategorias([]);
         setErrorCategorias(
-          obtenerMensajeError(err, 'No fue posible cargar las categorías disponibles.')
+          err?.message || 'No fue posible cargar las categorías disponibles.'
         );
       } finally {
         if (!cancelado) setCargandoCategorias(false);
@@ -387,7 +226,7 @@ export const ExplorarServicios = () => {
     }
   }, [cargandoCategorias, categoriaSeleccionada, categoriaActual]);
 
-  // Proveedores disponibles (CA-01).
+  // Proveedores disponibles (HU-009 CA-01).
   useEffect(() => {
     let cancelado = false;
     setCargandoProveedores(true);
@@ -402,7 +241,7 @@ export const ExplorarServicios = () => {
         if (cancelado) return;
         setProveedores([]);
         setErrorProveedores(
-          obtenerMensajeError(err, 'No fue posible consultar los proveedores disponibles.')
+          err?.message || 'No fue posible consultar los proveedores disponibles.'
         );
       } finally {
         if (!cancelado) setCargandoProveedores(false);
@@ -460,7 +299,7 @@ export const ExplorarServicios = () => {
         }
         setServicios([]);
         setErrorServicios(
-          obtenerMensajeError(err, 'No fue posible cargar los servicios disponibles.')
+          err?.message || 'No fue posible cargar los servicios disponibles.'
         );
       } finally {
         if (activo && idSolicitud === solicitudServiciosRef.current) {
@@ -476,7 +315,7 @@ export const ExplorarServicios = () => {
     };
   }, [criterioBusqueda, categoriaActual, recargaServicios]);
 
-  // ─── Acciones de la interfaz ───────────────────────────────────────────────
+  // ─── Acciones de búsqueda ──────────────────────────────────────────────────
 
   const handleSubmitBusqueda = (event) => {
     event.preventDefault();
@@ -505,65 +344,33 @@ export const ExplorarServicios = () => {
     setCriterioBusqueda('');
   };
 
-  const cargarDetalleProveedor = useCallback(async (idProveedor, forzar = false) => {
-    const estadoActual = detallesProveedorRef.current[idProveedor];
-
-    if (!forzar && estadoActual?.data) return;
-    if (estadoActual?.cargando) return;
-
-    const estadoCargando = {
-      cargando: true,
-      data: estadoActual?.data || null,
-      error: null,
-    };
-    detallesProveedorRef.current = {
-      ...detallesProveedorRef.current,
-      [idProveedor]: estadoCargando,
-    };
-    setDetallesProveedor(detallesProveedorRef.current);
-
-    try {
-      const data = await consultarProveedorPorId(idProveedor);
-      if (!montadoRef.current) return;
-      detallesProveedorRef.current = {
-        ...detallesProveedorRef.current,
-        [idProveedor]: { cargando: false, data, error: null },
-      };
-      setDetallesProveedor(detallesProveedorRef.current);
-    } catch (err) {
-      if (!montadoRef.current) return;
-      detallesProveedorRef.current = {
-        ...detallesProveedorRef.current,
-        [idProveedor]: {
-          cargando: false,
-          data: null,
-          error: obtenerMensajeError(
-            err,
-            'No fue posible consultar la información de este proveedor.'
-          ),
-        },
-      };
-      setDetallesProveedor(detallesProveedorRef.current);
-    }
-  }, []);
-
-  const alternarProveedor = (idProveedor) => {
-    if (proveedorExpandido === idProveedor) {
-      setProveedorExpandido(null);
-      return;
-    }
-
-    setProveedorExpandido(idProveedor);
-    cargarDetalleProveedor(idProveedor);
-  };
-
-  const reintentarDetalleProveedor = (idProveedor) => {
-    cargarDetalleProveedor(idProveedor, true);
-  };
-
   const reintentarServicios = () => setRecargaServicios((valor) => valor + 1);
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ─── Vistas de HU-010 ──────────────────────────────────────────────────────
+
+  if (vista.tipo === 'proveedor') {
+    return (
+      <PerfilProveedorPublico
+        idProveedor={vista.idProveedor}
+        onVolverExploracion={volverAExploracion}
+        onVerDetalleServicio={abrirServicioDesdePerfil}
+      />
+    );
+  }
+
+  if (vista.tipo === 'servicio') {
+    return (
+      <DetalleServicio
+        idServicio={vista.idServicio}
+        idProveedor={vista.idProveedor}
+        onVolverProveedor={vista.idProveedor ? volverAProveedor : null}
+        onVolverExploracion={volverAExploracion}
+        onVerProveedor={abrirPerfilProveedor}
+      />
+    );
+  }
+
+  // ─── Vista de exploración (HU-009) ─────────────────────────────────────────
 
   return (
     <section aria-labelledby="exploracion-titulo">
@@ -572,8 +379,8 @@ export const ExplorarServicios = () => {
           Explora servicios y proveedores
         </h3>
         <p className="mb-0 small">
-          Busca por nombre o categoría, conoce a los profesionales disponibles y encuentra la
-          alternativa que mejor se ajuste a tus necesidades. Las zonas de atención son información
+          Busca por nombre o categoría, conoce a los profesionales disponibles y consulta el
+          detalle de sus servicios antes de solicitar. Las zonas de atención son información
           orientativa.
         </p>
       </div>
@@ -722,7 +529,15 @@ export const ExplorarServicios = () => {
           <div className="row g-4">
             {servicios.map((servicio) => (
               <div className="col-12 col-md-6 col-xl-4" key={servicio.id}>
-                <TarjetaServicio servicio={servicio} />
+                <TarjetaServicio
+                  servicio={servicio}
+                  onVerDetalle={(servicioSeleccionado) =>
+                    abrirDetalleServicio(
+                      servicioSeleccionado.id,
+                      servicioSeleccionado.id_proveedor
+                    )
+                  }
+                />
               </div>
             ))}
           </div>
@@ -785,13 +600,7 @@ export const ExplorarServicios = () => {
           <div className="row g-4">
             {proveedores.map((proveedor) => (
               <div className="col-12 col-lg-6" key={proveedor.id}>
-                <TarjetaProveedor
-                  proveedor={proveedor}
-                  expandido={proveedorExpandido === proveedor.id}
-                  estadoDetalle={detallesProveedor[proveedor.id]}
-                  onAlternar={alternarProveedor}
-                  onReintentarDetalle={reintentarDetalleProveedor}
-                />
+                <TarjetaProveedor proveedor={proveedor} onVerPerfil={abrirPerfilProveedor} />
               </div>
             ))}
           </div>

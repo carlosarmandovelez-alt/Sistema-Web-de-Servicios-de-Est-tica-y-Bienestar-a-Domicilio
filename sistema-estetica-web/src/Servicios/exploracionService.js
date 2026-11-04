@@ -134,16 +134,33 @@ export const buscarServiciosPorNombre = async (nombre, { signal } = {}) => {
 };
 
 /**
- * Consulta el detalle público de un proveedor: perfil, zonas de atención y
- * catálogo de servicios activos. Corresponde a HU-010 y se reutiliza aquí para
- * ampliar la información de las tarjetas de proveedor de HU-009.
+ * HU-010 CA-01, CA-02 y CA-03: Consulta el perfil público de un proveedor.
+ * Incluye información profesional, zonas de atención y catálogo activo.
  * GET /api/exploracion/proveedores/{idProveedor}
  *
  * @param {number|string} idProveedor
+ * @param {{ signal?: AbortSignal }} opciones
  */
-export const consultarProveedorPorId = async (idProveedor) => {
+export const consultarProveedorPorId = async (idProveedor, { signal } = {}) => {
   return await peticionPublica(
     `${API_URL}/proveedores/${encodeURIComponent(idProveedor)}`,
-    'Error al consultar la información del proveedor'
+    'Error al consultar la información del proveedor',
+    signal
+  );
+};
+
+/**
+ * HU-010 CA-04 y CA-05: Consulta el detalle público de un servicio.
+ * Incluye multimedia e insumos cuando existan.
+ * GET /api/exploracion/servicios/{idServicio}
+ *
+ * @param {number|string} idServicio
+ * @param {{ signal?: AbortSignal }} opciones
+ */
+export const consultarServicioPorId = async (idServicio, { signal } = {}) => {
+  return await peticionPublica(
+    `${API_URL}/servicios/${encodeURIComponent(idServicio)}`,
+    'Error al consultar el detalle del servicio',
+    signal
   );
 };
