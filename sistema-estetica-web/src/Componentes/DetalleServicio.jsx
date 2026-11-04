@@ -104,6 +104,8 @@ export const DetalleServicio = ({
   onVolverProveedor,
   onVolverExploracion,
   onVerProveedor,
+  puedeSolicitar = false,
+  onSolicitarServicio,
 }) => {
   const [estado, setEstado] = useState({
     cargando: true,
@@ -285,6 +287,15 @@ export const DetalleServicio = ({
               <p className="small text-muted mb-0">
                 Duración: {duracion || 'No disponible'}
               </p>
+              {puedeSolicitar && typeof onSolicitarServicio === 'function' && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm mt-3"
+                  onClick={() => onSolicitarServicio(servicio.id, idProveedorDestino)}
+                >
+                  Solicitar este servicio
+                </button>
+              )}
             </div>
           </div>
 

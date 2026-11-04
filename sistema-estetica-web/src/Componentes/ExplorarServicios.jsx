@@ -15,6 +15,7 @@ import {
 } from './ExploracionComun';
 import { PerfilProveedorPublico } from './PerfilProveedorPublico';
 import { DetalleServicio } from './DetalleServicio';
+import { SolicitudServicio } from './SolicitudServicio';
 
 /**
  * ExplorarServicios (HU-009) con navegación de HU-010.
@@ -86,7 +87,7 @@ const TarjetaProveedor = ({ proveedor, onVerPerfil }) => {
   );
 };
 
-export const ExplorarServicios = () => {
+export const ExplorarServicios = ({ sesion }) => {
   // Proveedores disponibles (HU-009 CA-01)
   const [proveedores, setProveedores] = useState([]);
   const [cargandoProveedores, setCargandoProveedores] = useState(true);
@@ -161,6 +162,26 @@ export const ExplorarServicios = () => {
     } else {
       volverAExploracion();
     }
+  };
+
+  // HU-012: inicia la creación de la solicitud conservando el servicio y el
+  // Proveedor que el Cliente ya seleccionó en HU-010.
+  const abrirSolicitudServicio = (idServicioSeleccionado, idProveedorServicio) => {
+    setVista({
+      tipo: 'solicitud',
+      idServicio: idServicioSeleccionado,
+      idProveedor: idProveedorServicio ?? null,
+    });
+    irAlInicio();
+  };
+
+  const volverADetalleDesdeSolicitud = () => {
+    setVista({
+      tipo: 'servicio',
+      idServicio: vista.idServicio,
+      idProveedor: vista.idProveedor ?? null,
+    });
+    irAlInicio();
   };
 
   const abrirServicioDesdePerfil = (servicio) => {
@@ -366,6 +387,20 @@ export const ExplorarServicios = () => {
         onVolverProveedor={vista.idProveedor ? volverAProveedor : null}
         onVolverExploracion={volverAExploracion}
         onVerProveedor={abrirPerfilProveedor}
+        puedeSolicitar={Boolean(sesion?.token && sesion?.rol === 'cliente')}
+        onSolicitarServicio={abrirSolicitudServicio}
+      />
+    );
+  }
+
+  if (vista.tipo === 'solicitud') {
+    return (
+      <SolicitudServicio
+        idServicio={vista.idServicio}
+        idProveedor={vista.idProveedor}
+        sesion={sesion}
+        onVolverDetalle={volverADetalleDesdeSolicitud}
+        onVolverExploracion={volverAExploracion}
       />
     );
   }

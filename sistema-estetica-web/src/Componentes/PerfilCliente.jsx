@@ -399,7 +399,7 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
           role="tabpanel"
           aria-labelledby="tab-explorar-servicios"
         >
-          <ExplorarServicios />
+          <ExplorarServicios sesion={sesion} />
         </div>
       ) : (
         <div id="panel-mi-perfil" role="tabpanel" aria-labelledby="tab-mi-perfil">
