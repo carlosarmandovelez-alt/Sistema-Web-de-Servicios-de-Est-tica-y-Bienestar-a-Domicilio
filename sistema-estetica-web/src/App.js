@@ -3,8 +3,8 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { Registro } from './Componentes/registro';
 import { Login } from './Componentes/login';
 import { RecuperarPassword } from './Componentes/RecuperarPassword';
-import { PerfilCliente } from './Componentes/PerfilCliente';
-import { PerfilProveedor } from './Componentes/PerfilProveedor';
+import { PanelCliente } from './Componentes/PanelCliente';
+import { PanelProveedor } from './Componentes/PanelProveedor';
 
 const SESION_KEY = 'sesion';
 
@@ -54,7 +54,7 @@ function App() {
     if (sesion.rol === 'cliente') {
       return (
         <div className="App bg-light min-vh-100">
-          <PerfilCliente
+          <PanelCliente
             sesion={sesion}
             onCerrarSesion={cerrarSesion}
             onActualizarSesion={handleActualizarSesion}
@@ -66,7 +66,7 @@ function App() {
     if (sesion.rol === 'proveedor') {
       return (
         <div className="App bg-light min-vh-100">
-          <PerfilProveedor
+          <PanelProveedor
             sesion={sesion}
             onCerrarSesion={cerrarSesion}
             onActualizarSesion={handleActualizarSesion}

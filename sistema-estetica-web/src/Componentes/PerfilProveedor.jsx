@@ -5,7 +5,7 @@ import {
   actualizarZonasAtencion,
 } from '../Servicios/proveedorService';
 
-export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
+export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion, mostrarHeader = true }) => {
   // Estado general del perfil cargado desde el backend
   const [perfil, setPerfil] = useState(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
@@ -360,26 +360,28 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
   };
 
   return (
-    <div className="container py-4" style={{ maxWidth: '960px' }}>
+    <div className={mostrarHeader ? 'container py-4' : ''} style={mostrarHeader ? { maxWidth: '960px' } : undefined}>
       {/* Encabezado y barra superior */}
-      <header className="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-4 border-bottom">
-        <div>
-          <h2 className="h4 mb-1 text-primary fw-bold">Bienestar en Casa</h2>
-          <p className="text-muted small mb-0">Mi Perfil Profesional y Zonas de Atención</p>
-        </div>
-        <div className="d-flex align-items-center gap-3 mt-2 mt-sm-0">
-          <span className="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-3">
-            Proveedor: {perfil?.nombre || sesion?.nombre || 'Profesional'} {perfil?.apellido || ''}
-          </span>
-          <button
-            type="button"
-            className="btn btn-outline-danger btn-sm"
-            onClick={onCerrarSesion}
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+      {mostrarHeader && (
+        <header className="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-4 border-bottom">
+          <div>
+            <h2 className="h4 mb-1 text-primary fw-bold">Bienestar en Casa</h2>
+            <p className="text-muted small mb-0">Mi Perfil Profesional y Zonas de Atención</p>
+          </div>
+          <div className="d-flex align-items-center gap-3 mt-2 mt-sm-0">
+            <span className="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-3">
+              Proveedor: {perfil?.nombre || sesion?.nombre || 'Profesional'} {perfil?.apellido || ''}
+            </span>
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm"
+              onClick={onCerrarSesion}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Alerta general de error */}
       {errorGeneral && (

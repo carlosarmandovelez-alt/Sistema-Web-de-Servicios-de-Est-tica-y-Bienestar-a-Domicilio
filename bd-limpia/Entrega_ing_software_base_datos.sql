@@ -143,6 +143,29 @@ CREATE INDEX `fk_disponibilidad_proveedor1_idx` ON `proyecto_servicios_domicilio
 
 
 -- -----------------------------------------------------
+-- Table `proyecto_servicios_domicilio`.`periodo_no_disponible`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS 
+`proyecto_servicios_domicilio`.`periodo_no_disponible` (
+  `id_periodo` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `fecha_inicio` DATE NOT NULL,
+  `fecha_fin` DATE NOT NULL,
+  `id_proveedor` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`id_periodo`),
+  CONSTRAINT `fk_periodo_proveedor`
+    FOREIGN KEY (`id_proveedor`)
+    REFERENCES `proyecto_servicios_domicilio`.`proveedor` (`id_proveedor`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `chk_periodo_fechas` CHECK (`fecha_fin` >= `fecha_inicio`))
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE INDEX `idx_periodo_proveedor` ON `proyecto_servicios_domicilio`.`periodo_no_disponible` (`id_proveedor` ASC) VISIBLE;
+
+
+-- -----------------------------------------------------
 -- Table `proyecto_servicios_domicilio`.`recuperacion_password`
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `proyecto_servicios_domicilio`.`recuperacion_password` (
