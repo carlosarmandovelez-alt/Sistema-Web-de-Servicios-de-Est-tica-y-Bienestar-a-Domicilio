@@ -32,4 +32,8 @@ public interface solicitudReservaRepository extends JpaRepository<solicitud_rese
         @Param("idSolicitud") Integer idSolicitud, 
         @Param("proveedor") proveedorModel proveedor
     );
+
+    // HU-015: Buscar reservas aceptadas por proveedor para validar solapamiento
+    @Query("SELECT s FROM solicitud_reservaModel s WHERE s.proveedor = :proveedor AND s.estado = 'aceptada'")
+    List<solicitud_reservaModel> findReservasAceptadasByProveedor(@Param("proveedor") proveedorModel proveedor);
 }
