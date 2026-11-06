@@ -438,4 +438,29 @@ public class solicitudService {
         
         return convertirADTO(solicitudReservaRepository.save(solicitud));
     }
+
+
+    // ============================================
+    // HU-018: Finalizar servicio (Completar reserva)
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO completarServicio(String emailProveedor, Integer idSolicitud) {
+        // 1. Obtener el proveedor autenticado
+        proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
+
+        // 2. Buscar la solicitud y validar que le pertenezca al proveedor (CA-03)
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no está dirigida a usted"));
+
+        // 3. Validar que la reserva esté en estado ACEPTADA (CA-02)
+        if (solicitud.getEstado() != estadoSolicitudModel.aceptada) {
+            throw new estadoInvalidoException("Solo se pueden completar reservas que estén en estado Aceptada");
+        }
+
+        // 4. Cambiar el estado a COMPLETADA (CA-01)
+        solicitud.setEstado(estadoSolicitudModel.completada);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
 }
