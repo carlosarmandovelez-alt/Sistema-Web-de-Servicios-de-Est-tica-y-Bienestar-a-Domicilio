@@ -308,6 +308,67 @@ public class solicitudService {
         return convertirADTO(solicitudReservaRepository.save(solicitud));
     }
 
+
+        // ============================================
+    // HU-016: Aceptar contrapropuesta (Cliente) - CA-01, CA-02, CA-03
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO aceptarContrapropuesta(String emailCliente, Integer idSolicitud) {
+        clienteModel cliente = obtenerClientePorEmail(emailCliente);
+        solicitud_reservaModel solicitud = obtenerSolicitudSugeridaDelCliente(idSolicitud, cliente);
+
+        // Revalidar disponibilidad y solapamiento (CA-02 y CA-03)
+        validarDisponibilidad(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta());
+        validarSolapamiento(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
+
+        // Cambiar a Aceptada
+        solicitud.setEstado(estadoSolicitudModel.aceptada);
+        // Opcional: Actualizar la fecha solicitada a la propuesta para que quede consolidada
+        solicitud.setFecha_hora_solicitada(solicitud.getFecha_hora_propuesta());
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    // ============================================
+    // HU-016: Rechazar contrapropuesta (Cliente) - CA-04
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO rechazarContrapropuesta(String emailCliente, Integer idSolicitud, String motivo) {
+        clienteModel cliente = obtenerClientePorEmail(emailCliente);
+        solicitud_reservaModel solicitud = obtenerSolicitudSugeridaDelCliente(idSolicitud, cliente);
+
+        solicitud.setEstado(estadoSolicitudModel.cancelada);
+        // Si el motivo es obligatorio por regla de negocio (RN-09), lo validamos:
+        if (motivo == null || motivo.trim().isEmpty()) {
+            throw new disponibilidadException("El motivo de cancelación es obligatorio"); 
+        }
+        solicitud.setMotivo_rechazo_cancelacion(motivo);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    // ============================================
+    // Métodos Auxiliares para HU-016
+    // ============================================
+    private clienteModel obtenerClientePorEmail(String email) {
+        usuarioModel usuario = usuarioRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return clienteRepository.findByUsuario(usuario)
+            .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+    }
+
+    private solicitud_reservaModel obtenerSolicitudSugeridaDelCliente(Integer idSolicitud, clienteModel cliente) {
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYCliente(idSolicitud, cliente)
+            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece (CA-06)"));
+
+        if (solicitud.getEstado() != estadoSolicitudModel.sugerida) {
+            throw new estadoInvalidoException("La solicitud no se encuentra en estado Sugerida (CA-07)");
+        }
+        return solicitud;
+    }
+
     // ============================================
     // MÉTODOS AUXILIARES PARA HU-015
     // ============================================
