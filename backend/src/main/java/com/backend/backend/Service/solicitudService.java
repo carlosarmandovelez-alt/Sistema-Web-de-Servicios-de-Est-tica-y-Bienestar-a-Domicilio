@@ -396,4 +396,46 @@ public class solicitudService {
             }
         }
     }
+
+    // ============================================
+    // HU-017: Cancelar solicitud o reserva
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO cancelarSolicitud(String email, String rol, Integer idSolicitud, String motivo) {
+        // 1. Validar que el motivo sea obligatorio (CA-05)
+        if (motivo == null || motivo.trim().isEmpty()) {
+            throw new disponibilidadException("El motivo de cancelación es obligatorio");
+        }
+
+        solicitud_reservaModel solicitud;
+
+        // 2. Buscar la solicitud dependiendo del rol y validar propiedad (CA-06)
+        if (rol.equals("cliente")) {
+            clienteModel cliente = obtenerClientePorEmail(email);
+            solicitud = solicitudReservaRepository.buscarPorIdYCliente(idSolicitud, cliente)
+                .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
+        } else {
+            proveedorModel proveedor = obtenerProveedorPorEmail(email);
+            solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+                .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
+        }
+
+        // 3. Validar estados permitidos (CA-07 y CA-08)
+        if (solicitud.getEstado() == estadoSolicitudModel.completada) {
+            throw new estadoInvalidoException("No se puede cancelar una reserva que ya fue completada");
+        }
+        if (solicitud.getEstado() == estadoSolicitudModel.cancelada) {
+            throw new estadoInvalidoException("La solicitud ya se encuentra cancelada");
+        }
+        if (solicitud.getEstado() == estadoSolicitudModel.rechazada) {
+            throw new estadoInvalidoException("No se puede cancelar una solicitud que ya fue rechazada");
+        }
+
+        // 4. Realizar la cancelación (CA-01, CA-02, CA-03, CA-04)
+        solicitud.setEstado(estadoSolicitudModel.cancelada);
+        solicitud.setMotivo_rechazo_cancelacion(motivo);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
 }
