@@ -139,4 +139,15 @@ public class solicitudController {
         // Le pasamos el rol "proveedor" al servicio
         return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "proveedor", idSolicitud, dto.getMotivo_rechazo()));
     }
+
+    // ============================================
+    // HU-018: Endpoint de Finalización
+    // ============================================
+    
+    @PatchMapping("/recibidas/{idSolicitud}/completar")
+    public ResponseEntity<solicitudResponseDTO> completarServicio(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.completarServicio(authentication.getName(), idSolicitud));
+    }
 }
