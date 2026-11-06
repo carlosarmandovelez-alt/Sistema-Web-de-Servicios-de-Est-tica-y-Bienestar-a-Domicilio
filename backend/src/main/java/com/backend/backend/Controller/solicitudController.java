@@ -98,4 +98,21 @@ public class solicitudController {
             @Valid @RequestBody contrapropuestaDTO dto) {
         return ResponseEntity.ok(solicitudService.proponerHorario(authentication.getName(), idSolicitud, dto.getFecha_hora_propuesta()));
     }
+
+    // ============================================
+    // HU-016: Endpoints de respuesta del Cliente
+    // ============================================
+    
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/aceptar-propuesta")
+    public ResponseEntity<solicitudResponseDTO> aceptarContrapropuesta(Authentication authentication, @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.aceptarContrapropuesta(authentication.getName(), idSolicitud));
+    }
+
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/rechazar-propuesta")
+    public ResponseEntity<solicitudResponseDTO> rechazarContrapropuesta(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.rechazarContrapropuesta(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
+    }
 }
