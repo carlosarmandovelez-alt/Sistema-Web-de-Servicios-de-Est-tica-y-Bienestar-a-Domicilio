@@ -115,4 +115,28 @@ public class solicitudController {
             @RequestBody respuestaSolicitudDTO dto) {
         return ResponseEntity.ok(solicitudService.rechazarContrapropuesta(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
     }
+
+    // ============================================
+    // HU-017: Endpoints de Cancelación
+    // ============================================
+
+    // Para el Cliente
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/cancelar")
+    public ResponseEntity<solicitudResponseDTO> cancelarSolicitudCliente(
+            Authentication authentication,
+            @PathVariable Integer idSolicitud,
+            @RequestBody respuestaSolicitudDTO dto) {
+        // Le pasamos el rol "cliente" al servicio
+        return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "cliente", idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+    // Para el Proveedor
+    @PatchMapping("/recibidas/{idSolicitud}/cancelar")
+    public ResponseEntity<solicitudResponseDTO> cancelarSolicitudProveedor(
+            Authentication authentication,
+            @PathVariable Integer idSolicitud,
+            @RequestBody respuestaSolicitudDTO dto) {
+        // Le pasamos el rol "proveedor" al servicio
+        return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "proveedor", idSolicitud, dto.getMotivo_rechazo()));
+    }
 }
