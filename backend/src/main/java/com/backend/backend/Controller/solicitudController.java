@@ -1,6 +1,8 @@
 package com.backend.backend.Controller;
 
+import com.backend.backend.DTO.contrapropuestaDTO;
 import com.backend.backend.DTO.crearSolicitudDTO;
+import com.backend.backend.DTO.respuestaSolicitudDTO;
 import com.backend.backend.DTO.solicitudResponseDTO;
 import com.backend.backend.Service.solicitudService;
 import jakarta.validation.Valid;
@@ -70,5 +72,30 @@ public class solicitudController {
         String email = authentication.getName();
         solicitudResponseDTO solicitud = solicitudService.consultarDetalleRecibida(email, idSolicitud);
         return ResponseEntity.ok(solicitud);
+    }
+
+        // ============================================
+    // HU-015: Endpoints de respuesta del Proveedor
+    // ============================================
+    
+    @PatchMapping("/recibidas/{idSolicitud}/aceptar")
+    public ResponseEntity<solicitudResponseDTO> aceptarSolicitud(Authentication authentication, @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.aceptarSolicitud(authentication.getName(), idSolicitud));
+    }
+
+    @PatchMapping("/recibidas/{idSolicitud}/rechazar")
+    public ResponseEntity<solicitudResponseDTO> rechazarSolicitud(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.rechazarSolicitud(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+    @PatchMapping("/recibidas/{idSolicitud}/proponer")
+    public ResponseEntity<solicitudResponseDTO> proponerHorario(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @Valid @RequestBody contrapropuestaDTO dto) {
+        return ResponseEntity.ok(solicitudService.proponerHorario(authentication.getName(), idSolicitud, dto.getFecha_hora_propuesta()));
     }
 }
