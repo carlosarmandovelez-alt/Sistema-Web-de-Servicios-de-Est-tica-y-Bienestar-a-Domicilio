@@ -3,6 +3,7 @@ package com.backend.backend.Service;
 import com.backend.backend.DTO.crearSolicitudDTO;
 import com.backend.backend.DTO.solicitudResponseDTO;
 import com.backend.backend.Exception.disponibilidadException;
+import com.backend.backend.Exception.estadoInvalidoException;
 import com.backend.backend.Exception.servicioNoEncontradoException;
 import com.backend.backend.Exception.solicitudNoEncontradaException;
 import com.backend.backend.Model.*;
@@ -238,5 +239,100 @@ public class solicitudService {
             s.getCliente().getId_cliente(),     
             s.getProveedor().getId_proveedor()    
         );
+    }
+
+    // Método auxiliar para obtener el proveedor desde el token
+    private proveedorModel obtenerProveedorPorEmail(String email) {
+        usuarioModel usuario = usuarioRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        
+        return proveedorRepository.findByUsuario(usuario)
+            .orElseThrow(() -> new RuntimeException("Proveedor no encontrado"));
+    }
+
+        // ============================================
+    // HU-015: Aceptar Solicitud (CA-01, CA-02, CA-03)
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO aceptarSolicitud(String emailProveedor, Integer idSolicitud) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
+        solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
+
+        // Revalidar que el horario siga estando disponible (CA-02)
+        validarDisponibilidad(proveedor, solicitud.getFecha_hora_solicitada());
+
+        // Validar solapamiento (CA-03)
+        validarSolapamiento(proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
+
+        // Cambiar estado
+        solicitud.setEstado(estadoSolicitudModel.aceptada);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    // ============================================
+    // HU-015: Rechazar Solicitud (CA-04, CA-05)
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO rechazarSolicitud(String emailProveedor, Integer idSolicitud, String motivo) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
+        solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
+
+        if (motivo == null || motivo.trim().isEmpty()) {
+            throw new disponibilidadException("El motivo de rechazo es obligatorio"); // CA-05
+        }
+
+        solicitud.setEstado(estadoSolicitudModel.rechazada);
+        solicitud.setMotivo_rechazo_cancelacion(motivo);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    // ============================================
+    // HU-015: Proponer otro horario (CA-06, CA-07)
+    // ============================================
+    @Transactional
+    public solicitudResponseDTO proponerHorario(String emailProveedor, Integer idSolicitud, LocalDateTime nuevaFecha) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
+        solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
+
+        // Validar que el nuevo horario esté en la disponibilidad (CA-07)
+        validarDisponibilidad(proveedor, nuevaFecha);
+
+        solicitud.setEstado(estadoSolicitudModel.sugerida);
+        solicitud.setFecha_hora_propuesta(nuevaFecha);
+        solicitud.setFecha_actualizacion(LocalDateTime.now());
+        
+        return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    // ============================================
+    // MÉTODOS AUXILIARES PARA HU-015
+    // ============================================
+    private solicitud_reservaModel obtenerSolicitudPendienteDelProveedor(Integer idSolicitud, proveedorModel proveedor) {
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no está dirigida a usted (CA-08)"));
+
+        if (solicitud.getEstado() != estadoSolicitudModel.pendiente) {
+            throw new estadoInvalidoException("La solicitud no se encuentra en estado Pendiente (CA-10)");
+        }
+        return solicitud;
+    }
+
+    private void validarSolapamiento(proveedorModel proveedor, LocalDateTime fechaInicio, Integer duracionMinutos) {
+        LocalDateTime fechaFin = fechaInicio.plusMinutes(duracionMinutos);
+        List<solicitud_reservaModel> reservasAceptadas = solicitudReservaRepository.findReservasAceptadasByProveedor(proveedor);
+
+        for (solicitud_reservaModel reserva : reservasAceptadas) {
+            LocalDateTime inicioReserva = reserva.getFecha_hora_solicitada();
+            LocalDateTime finReserva = inicioReserva.plusMinutes(reserva.getDuracion_snapshot_minutos());
+
+            // Lógica de solapamiento: (InicioA < FinB) y (FinA > InicioB)
+            if (fechaInicio.isBefore(finReserva) && fechaFin.isAfter(inicioReserva)) {
+                throw new disponibilidadException("El horario se cruza con otra reserva aceptada (CA-03)");
+            }
+        }
     }
 }
