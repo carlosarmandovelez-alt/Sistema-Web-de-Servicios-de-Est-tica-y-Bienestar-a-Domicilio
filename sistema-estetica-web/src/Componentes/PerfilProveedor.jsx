@@ -5,6 +5,7 @@ import {
   actualizarZonasAtencion,
 } from '../Servicios/proveedorService';
 import { SolicitudesRecibidas } from './SolicitudesRecibidas';
+import { AgendaProveedor } from './AgendaProveedor';
 
 export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
   // Estado general del perfil cargado desde el backend
@@ -406,6 +407,17 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             Solicitudes recibidas
           </button>
         </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'agenda'}
+            className={`nav-link ${tabActiva === 'agenda' ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva('agenda')}
+          >
+            Agenda
+          </button>
+        </li>
       </ul>
 
       {/* Alerta general de error */}
@@ -442,7 +454,12 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
       )}
 
       {/* Estado de carga inicial */}
-      {tabActiva === 'solicitudes' ? (
+      {tabActiva === 'agenda' ? (
+        <AgendaProveedor
+          token={sesion?.token}
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === 'solicitudes' ? (
         <SolicitudesRecibidas
           sesion={sesion}
           onCerrarSesion={onCerrarSesion}

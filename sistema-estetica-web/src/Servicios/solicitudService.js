@@ -390,3 +390,18 @@ export const rechazarContrapropuestaCliente = async (
     { motivo_rechazo: motivo },
     'Error al rechazar la contrapropuesta'
   );
+
+export const consultarAgendaProveedor = async (token, { signal } = {}) => {
+  const data = await peticionGetAutenticada(
+    token,
+    `${API_URL}/recibidas/agenda`,
+    { signal },
+    'Error al consultar la agenda'
+  );
+
+  if (!Array.isArray(data)) {
+    throw new Error('El servidor devolvió una respuesta no válida.');
+  }
+
+  return data;
+};
