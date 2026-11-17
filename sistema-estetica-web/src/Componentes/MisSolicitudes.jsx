@@ -26,6 +26,7 @@ import {
   obtenerMotivoSolicitud,
   ordenarSolicitudesPorCreacion,
 } from './solicitudConsultaUtilidades';
+import { CancelarSolicitud } from './CancelarSolicitud';
 
 /**
  * HU-013: consulta de solicitudes y reservas del Cliente.
@@ -693,6 +694,15 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
 
         <AccionesContrapropuesta
           detalle={detalle}
+          token={sesion.token}
+          onActualizada={actualizarSolicitud}
+          onCerrarSesion={onCerrarSesion}
+        />
+
+        <CancelarSolicitud
+          idSolicitud={detalle.id_solicitud}
+          estado={detalle.estado}
+          rol="cliente"
           token={sesion.token}
           onActualizada={actualizarSolicitud}
           onCerrarSesion={onCerrarSesion}

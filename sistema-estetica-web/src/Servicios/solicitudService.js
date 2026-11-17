@@ -312,6 +312,57 @@ const peticionPatchAutenticada = async (
   }
 };
 
+export const aceptarSolicitudProveedor = async (token, idSolicitud) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/aceptar`,
+    undefined,
+    'Error al aceptar la solicitud'
+  );
+
+export const rechazarSolicitudProveedor = async (
+  token,
+  idSolicitud,
+  motivo
+) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/rechazar`,
+    { motivo_rechazo: motivo },
+    'Error al rechazar la solicitud'
+  );
+
+export const proponerHorarioProveedor = async (
+  token,
+  idSolicitud,
+  fechaHoraPropuesta
+) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/proponer`,
+    { fecha_hora_propuesta: fechaHoraPropuesta },
+    'Error al proponer un nuevo horario'
+  );
+
+export const cancelarSolicitud = async (
+  token,
+  rol,
+  idSolicitud,
+  motivo
+) => {
+  const base =
+    rol === 'proveedor'
+      ? `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/cancelar`
+      : `${API_URL}/mis-solicitudes/${encodeURIComponent(idSolicitud)}/cancelar`;
+
+  return peticionPatchAutenticada(
+    token,
+    base,
+    { motivo_rechazo: motivo },
+    'Error al cancelar la solicitud'
+  );
+};
+
 export const aceptarContrapropuestaCliente = async (token, idSolicitud) =>
   peticionPatchAutenticada(
     token,
