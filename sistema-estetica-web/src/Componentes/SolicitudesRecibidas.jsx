@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  aceptarSolicitudProveedor,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
+  proponerHorarioProveedor,
+  rechazarSolicitudProveedor,
 } from '../Servicios/solicitudService';
 import {
   AlertaError,
@@ -74,6 +77,236 @@ const AccesoRestringido = ({ sesion, onCerrarSesion }) => (
     </h2>
   </section>
 );
+
+const AccionesSolicitud = ({
+  detalle,
+  token,
+  onActualizada,
+  onCerrarSesion,
+}) => {
+  const [accion, setAccion] = useState(null);
+  const [motivo, setMotivo] = useState('');
+  const [fechaHora, setFechaHora] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+  const [exito, setExito] = useState(null);
+
+  if (!detalle || detalle.estado !== 'pendiente') return null;
+
+  const ejecutar = async (operacion, mensajeExito) => {
+    setEnviando(true);
+    setError(null);
+    setExito(null);
+
+    try {
+      const actualizada = await operacion();
+      if (!actualizada || typeof actualizada !== 'object') {
+        throw new Error('El servidor no devolvió la solicitud actualizada.');
+      }
+      onActualizada(actualizada);
+      setExito(mensajeExito);
+      setAccion(null);
+      setMotivo('');
+      setFechaHora('');
+    } catch (err) {
+      setError(
+        obtenerMensajeError(
+          err,
+          'No fue posible registrar la respuesta a la solicitud.'
+        )
+      );
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const aceptar = () =>
+    ejecutar(
+      () => aceptarSolicitudProveedor(token, detalle.id_solicitud),
+      'La solicitud fue aceptada correctamente.'
+    );
+
+  const rechazar = () => {
+    if (!motivo.trim()) {
+      setError('Escribe el motivo del rechazo.');
+      return;
+    }
+
+    ejecutar(
+      () =>
+        rechazarSolicitudProveedor(
+          token,
+          detalle.id_solicitud,
+          motivo.trim()
+        ),
+      'La solicitud fue rechazada y se registró el motivo.'
+    );
+  };
+
+  const proponer = () => {
+    if (!fechaHora) {
+      setError('Selecciona la nueva fecha y hora.');
+      return;
+    }
+
+    const fecha = new Date(fechaHora);
+    if (Number.isNaN(fecha.getTime()) || fecha.getTime() <= Date.now()) {
+      setError('La fecha y hora propuestas deben estar en el futuro.');
+      return;
+    }
+
+    ejecutar(
+      () =>
+        proponerHorarioProveedor(
+          token,
+          detalle.id_solicitud,
+          `${fechaHora}:00`
+        ),
+      'Se envió una nueva propuesta de horario al Cliente.'
+    );
+  };
+
+  const errorAutenticacion =
+    error && /autorización|sesión|token/i.test(String(error));
+
+  return (
+    <div className="card shadow-sm border-0 mb-4">
+      <div className="card-body">
+        <h3 className="h5 fw-semibold text-dark mb-2">
+          Responder solicitud
+        </h3>
+        <p className="small text-muted mb-3">
+          La solicitud está pendiente. Puedes aceptarla, rechazarla con un
+          motivo o proponer un nuevo horario al Cliente.
+        </p>
+
+        {error && (
+          <AlertaError mensaje={error}>
+            {errorAutenticacion && onCerrarSesion && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={onCerrarSesion}
+              >
+                Cerrar sesión
+              </button>
+            )}
+          </AlertaError>
+        )}
+
+        {exito && (
+          <div className="alert alert-success" role="status">
+            {exito}
+          </div>
+        )}
+
+        <div className="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-success"
+            onClick={aceptar}
+            disabled={enviando}
+          >
+            Aceptar solicitud
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-danger"
+            onClick={() => {
+              setAccion('rechazar');
+              setError(null);
+              setExito(null);
+            }}
+            disabled={enviando}
+          >
+            Rechazar
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-primary"
+            onClick={() => {
+              setAccion('proponer');
+              setError(null);
+              setExito(null);
+            }}
+            disabled={enviando}
+          >
+            Proponer otro horario
+          </button>
+        </div>
+
+        {accion === 'rechazar' && (
+          <div className="border rounded p-3 mt-3">
+            <label htmlFor="motivo-rechazo" className="form-label small fw-semibold">
+              Motivo del rechazo
+            </label>
+            <textarea
+              id="motivo-rechazo"
+              className="form-control"
+              rows="3"
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              maxLength="500"
+              required
+            />
+            <div className="d-flex gap-2 mt-3">
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={rechazar}
+                disabled={enviando}
+              >
+                {enviando ? 'Enviando...' : 'Confirmar rechazo'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setAccion(null)}
+                disabled={enviando}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {accion === 'proponer' && (
+          <div className="border rounded p-3 mt-3">
+            <label htmlFor="nueva-fecha" className="form-label small fw-semibold">
+              Nueva fecha y hora propuesta
+            </label>
+            <input
+              type="datetime-local"
+              id="nueva-fecha"
+              className="form-control"
+              value={fechaHora}
+              onChange={(event) => setFechaHora(event.target.value)}
+              required
+            />
+            <div className="d-flex gap-2 mt-3">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={proponer}
+                disabled={enviando}
+              >
+                {enviando ? 'Enviando...' : 'Enviar propuesta'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setAccion(null)}
+                disabled={enviando}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
   const [vista, setVista] = useState({ tipo: 'lista' });
@@ -201,6 +434,17 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     setCargandoDetalle(true);
     setErrorDetalle(null);
     setIntentoDetalle((valor) => valor + 1);
+  };
+
+  const actualizarSolicitud = (actualizada) => {
+    setDetalle(actualizada);
+    setSolicitudes((previas) =>
+      previas.map((solicitud) =>
+        solicitud.id_solicitud === actualizada.id_solicitud
+          ? actualizada
+          : solicitud
+      )
+    );
   };
 
   // ─── Detalle de una solicitud recibida ─────────────────────────────────────
@@ -458,6 +702,13 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
             </p>
           </div>
         </div>
+
+        <AccionesSolicitud
+          detalle={detalle}
+          token={sesion.token}
+          onActualizada={actualizarSolicitud}
+          onCerrarSesion={onCerrarSesion}
+        />
       </section>
     );
   }

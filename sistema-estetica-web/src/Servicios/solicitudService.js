@@ -269,3 +269,77 @@ export const consultarDetalleRecibida = async (
 
   return data;
 };
+
+const peticionPatchAutenticada = async (
+  token,
+  url,
+  body,
+  fallbackMensaje
+) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.status = 401;
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new Error(
+      'No fue posible conectar con el servidor. Verifica tu conexión a internet.'
+    );
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, fallbackMensaje);
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(
+      'El servidor devolvió una respuesta no válida. Inténtalo de nuevo.'
+    );
+  }
+};
+
+export const aceptarSolicitudProveedor = async (token, idSolicitud) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/aceptar`,
+    undefined,
+    'Error al aceptar la solicitud'
+  );
+
+export const rechazarSolicitudProveedor = async (
+  token,
+  idSolicitud,
+  motivo
+) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/rechazar`,
+    { motivo_rechazo: motivo },
+    'Error al rechazar la solicitud'
+  );
+
+export const proponerHorarioProveedor = async (
+  token,
+  idSolicitud,
+  fechaHoraPropuesta
+) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/proponer`,
+    { fecha_hora_propuesta: fechaHoraPropuesta },
+    'Error al proponer un nuevo horario'
+  );
