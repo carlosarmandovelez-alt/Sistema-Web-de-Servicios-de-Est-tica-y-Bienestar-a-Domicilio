@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  aceptarContrapropuestaCliente,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
+  rechazarContrapropuestaCliente,
 } from '../Servicios/solicitudService';
 import { consultarProveedorPorId } from '../Servicios/exploracionService';
 import {
@@ -74,6 +76,171 @@ const AccesoRestringido = ({ sesion, onExplorarServicios }) => (
     </h2>
   </section>
 );
+
+const AccionesContrapropuesta = ({
+  detalle,
+  token,
+  onActualizada,
+  onCerrarSesion,
+}) => {
+  const [mostrandoRechazo, setMostrandoRechazo] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+  const [exito, setExito] = useState(null);
+
+  if (!detalle || detalle.estado !== 'sugerida') return null;
+
+  const ejecutar = async (operacion, mensajeExito) => {
+    setEnviando(true);
+    setError(null);
+    setExito(null);
+
+    try {
+      const actualizada = await operacion();
+      if (!actualizada || typeof actualizada !== 'object') {
+        throw new Error('El servidor no devolvió la solicitud actualizada.');
+      }
+      onActualizada(actualizada);
+      setExito(mensajeExito);
+      setMostrandoRechazo(false);
+      setMotivo('');
+    } catch (err) {
+      setError(
+        obtenerMensajeError(
+          err,
+          'No fue posible registrar tu respuesta a la contrapropuesta.'
+        )
+      );
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const aceptar = () =>
+    ejecutar(
+      () => aceptarContrapropuestaCliente(token, detalle.id_solicitud),
+      'Aceptaste la contrapropuesta. La reserva quedó confirmada.'
+    );
+
+  const rechazar = () => {
+    if (!motivo.trim()) {
+      setError('Escribe el motivo del rechazo.');
+      return;
+    }
+
+    ejecutar(
+      () =>
+        rechazarContrapropuestaCliente(
+          token,
+          detalle.id_solicitud,
+          motivo.trim()
+        ),
+      'Rechazaste la contrapropuesta y se registró el motivo.'
+    );
+  };
+
+  const errorAutenticacion =
+    error && /autorización|sesión|token/i.test(String(error));
+
+  return (
+    <div className="card shadow-sm border-0 mb-4">
+      <div className="card-body">
+        <h3 className="h5 fw-semibold text-dark mb-2">
+          Responder contrapropuesta
+        </h3>
+        <p className="small text-muted mb-3">
+          El Proveedor propuso un nuevo horario
+          {detalle.fecha_hora_propuesta
+            ? `: ${formatearLocalDateTime(detalle.fecha_hora_propuesta)}`
+            : '.'}{' '}
+          Puedes aceptarlo o rechazarlo.
+        </p>
+
+        {error && (
+          <AlertaError mensaje={error}>
+            {errorAutenticacion && onCerrarSesion && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={onCerrarSesion}
+              >
+                Cerrar sesión
+              </button>
+            )}
+          </AlertaError>
+        )}
+
+        {exito && (
+          <div className="alert alert-success" role="status">
+            {exito}
+          </div>
+        )}
+
+        <div className="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-success"
+            onClick={aceptar}
+            disabled={enviando}
+          >
+            Aceptar contrapropuesta
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-danger"
+            onClick={() => {
+              setMostrandoRechazo(true);
+              setError(null);
+              setExito(null);
+            }}
+            disabled={enviando}
+          >
+            Rechazar contrapropuesta
+          </button>
+        </div>
+
+        {mostrandoRechazo && (
+          <div className="border rounded p-3 mt-3">
+            <label
+              htmlFor="motivo-rechazo-propuesta"
+              className="form-label small fw-semibold"
+            >
+              Motivo del rechazo
+            </label>
+            <textarea
+              id="motivo-rechazo-propuesta"
+              className="form-control"
+              rows="3"
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              maxLength="500"
+              required
+            />
+            <div className="d-flex gap-2 mt-3">
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={rechazar}
+                disabled={enviando}
+              >
+                {enviando ? 'Enviando...' : 'Confirmar rechazo'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setMostrandoRechazo(false)}
+                disabled={enviando}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) => {
   const [vista, setVista] = useState({ tipo: 'lista' });
@@ -260,6 +427,17 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
     setCargandoDetalle(true);
     setErrorDetalle(null);
     setIntentoDetalle((valor) => valor + 1);
+  };
+
+  const actualizarSolicitud = (actualizada) => {
+    setDetalle(actualizada);
+    setSolicitudes((previas) =>
+      previas.map((solicitud) =>
+        solicitud.id_solicitud === actualizada.id_solicitud
+          ? actualizada
+          : solicitud
+      )
+    );
   };
 
   // ─── Detalle de la solicitud ───────────────────────────────────────────────
@@ -512,6 +690,13 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
           El nombre, el precio y la duración mostrados corresponden a la copia conservada en la
           solicitud. No se sustituyen por los valores actuales del catálogo del Proveedor.
         </div>
+
+        <AccionesContrapropuesta
+          detalle={detalle}
+          token={sesion.token}
+          onActualizada={actualizarSolicitud}
+          onCerrarSesion={onCerrarSesion}
+        />
       </section>
     );
   }

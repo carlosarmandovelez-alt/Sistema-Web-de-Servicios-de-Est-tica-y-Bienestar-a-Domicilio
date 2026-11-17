@@ -269,3 +269,65 @@ export const consultarDetalleRecibida = async (
 
   return data;
 };
+
+const peticionPatchAutenticada = async (
+  token,
+  url,
+  body,
+  fallbackMensaje
+) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.status = 401;
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new Error(
+      'No fue posible conectar con el servidor. Verifica tu conexión a internet.'
+    );
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, fallbackMensaje);
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(
+      'El servidor devolvió una respuesta no válida. Inténtalo de nuevo.'
+    );
+  }
+};
+
+export const aceptarContrapropuestaCliente = async (token, idSolicitud) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/mis-solicitudes/${encodeURIComponent(idSolicitud)}/aceptar-propuesta`,
+    undefined,
+    'Error al aceptar la contrapropuesta'
+  );
+
+export const rechazarContrapropuestaCliente = async (
+  token,
+  idSolicitud,
+  motivo
+) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/mis-solicitudes/${encodeURIComponent(idSolicitud)}/rechazar-propuesta`,
+    { motivo_rechazo: motivo },
+    'Error al rechazar la contrapropuesta'
+  );
