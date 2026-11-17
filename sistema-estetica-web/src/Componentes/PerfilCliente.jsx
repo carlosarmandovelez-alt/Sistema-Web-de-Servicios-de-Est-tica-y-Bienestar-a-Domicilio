@@ -4,6 +4,7 @@ import {
   actualizarDatosPersonales,
   actualizarDireccionPrincipal,
 } from '../Servicios/clienteService';
+import { ExplorarServicios } from './ExplorarServicios';
 
 export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
   // Estado general del perfil cargado desde el backend
@@ -11,6 +12,7 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [errorGeneral, setErrorGeneral] = useState(null);
   const [mensajeExito, setMensajeExito] = useState(null);
+  const [tabActiva, setTabActiva] = useState('perfil');
 
   // Estados de edición para Datos Personales
   const [editandoPersonales, setEditandoPersonales] = useState(false);
@@ -355,8 +357,33 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
         </div>
       </header>
 
+      <ul className="nav nav-tabs mb-4" role="tablist">
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'perfil'}
+            className={`nav-link ${tabActiva === 'perfil' ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva('perfil')}
+          >
+            Mi perfil
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === 'explorar'}
+            className={`nav-link ${tabActiva === 'explorar' ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva('explorar')}
+          >
+            Explorar servicios
+          </button>
+        </li>
+      </ul>
+
       {/* Alerta general de error */}
-      {errorGeneral && (
+      {tabActiva === 'perfil' && errorGeneral && (
         <div className="alert alert-danger alert-dismissible fade show mb-4" role="alert" aria-live="assertive">
           <div className="d-flex align-items-center justify-content-between">
             <span>{errorGeneral}</span>
@@ -374,7 +401,7 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
       )}
 
       {/* Alerta general de éxito */}
-      {mensajeExito && (
+      {tabActiva === 'perfil' && mensajeExito && (
         <div className="alert alert-success alert-dismissible fade show mb-4" role="alert" aria-live="polite">
           <div className="d-flex justify-content-between align-items-center">
             <span>{mensajeExito}</span>
@@ -389,7 +416,9 @@ export const PerfilCliente = ({ sesion, onCerrarSesion, onActualizarSesion }) =>
       )}
 
       {/* Estado de carga inicial */}
-      {cargandoInicial ? (
+      {tabActiva === 'explorar' ? (
+        <ExplorarServicios />
+      ) : cargandoInicial ? (
         <div className="text-center py-5" aria-live="polite">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando información del perfil...</span>
