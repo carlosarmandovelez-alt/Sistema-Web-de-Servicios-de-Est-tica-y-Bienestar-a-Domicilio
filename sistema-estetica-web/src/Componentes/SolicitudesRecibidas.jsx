@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   aceptarSolicitudProveedor,
+  completarServicioProveedor,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
   proponerHorarioProveedor,
@@ -78,6 +79,86 @@ const AccesoRestringido = ({ sesion, onCerrarSesion }) => (
     </h2>
   </section>
 );
+
+const CompletarServicio = ({ detalle, token, onActualizada, onCerrarSesion }) => {
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+  const [exito, setExito] = useState(null);
+
+  if (!detalle || detalle.estado !== 'aceptada') return null;
+
+  const completar = async () => {
+    setEnviando(true);
+    setError(null);
+    setExito(null);
+
+    try {
+      const actualizada = await completarServicioProveedor(
+        token,
+        detalle.id_solicitud
+      );
+
+      if (!actualizada || typeof actualizada !== 'object') {
+        throw new Error('El servidor no devolvió la solicitud actualizada.');
+      }
+
+      onActualizada(actualizada);
+      setExito('El servicio fue marcado como completado.');
+    } catch (err) {
+      setError(
+        obtenerMensajeError(err, 'No fue posible finalizar el servicio.')
+      );
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const errorAutenticacion =
+    error && /autorización|sesión|token/i.test(String(error));
+
+  return (
+    <div className="card shadow-sm border-0 mb-4">
+      <div className="card-body">
+        <h3 className="h5 fw-semibold text-dark mb-2">
+          Finalizar servicio
+        </h3>
+        <p className="small text-muted mb-3">
+          La reserva está aceptada. Cuando hayas prestado el servicio, márcala
+          como completada.
+        </p>
+
+        {error && (
+          <AlertaError mensaje={error}>
+            {errorAutenticacion && onCerrarSesion && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={onCerrarSesion}
+              >
+                Cerrar sesión
+              </button>
+            )}
+          </AlertaError>
+        )}
+
+        {exito && (
+          <div className="alert alert-success" role="status">
+            {exito}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-success"
+          onClick={completar}
+          disabled={enviando}
+        >
+          {enviando ? 'Finalizando...' : 'Marcar como completado'}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const AccionesSolicitud = ({
   detalle,
@@ -715,6 +796,13 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
           idSolicitud={detalle.id_solicitud}
           estado={detalle.estado}
           rol="proveedor"
+          token={sesion.token}
+          onActualizada={actualizarSolicitud}
+          onCerrarSesion={onCerrarSesion}
+        />
+
+        <CompletarServicio
+          detalle={detalle}
           token={sesion.token}
           onActualizada={actualizarSolicitud}
           onCerrarSesion={onCerrarSesion}

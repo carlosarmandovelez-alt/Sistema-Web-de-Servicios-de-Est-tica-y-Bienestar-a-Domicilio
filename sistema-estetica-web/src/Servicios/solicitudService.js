@@ -344,6 +344,14 @@ export const proponerHorarioProveedor = async (
     'Error al proponer un nuevo horario'
   );
 
+export const completarServicioProveedor = async (token, idSolicitud) =>
+  peticionPatchAutenticada(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/completar`,
+    undefined,
+    'Error al finalizar el servicio'
+  );
+
 export const cancelarSolicitud = async (
   token,
   rol,
