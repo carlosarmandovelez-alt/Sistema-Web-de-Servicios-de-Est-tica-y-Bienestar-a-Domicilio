@@ -4,6 +4,7 @@ import {
   describirHoraFin,
   esFechaHoraFutura,
   esFechaValida,
+  esHoraEnFranjaMediaHora,
   esHoraValida,
   formatearLocalDateTime,
   mapearEstadoSolicitud,
@@ -19,6 +20,14 @@ describe('HU-012: utilidades de fecha, hora y estado', () => {
     expect(construirFechaHoraSolicitada('2026-11-12', '13:00:45')).toBe(
       '2026-11-12T13:00:45'
     );
+  });
+
+  test('solo admite reservas en punto o a la media hora, igual que el backend', () => {
+    expect(esHoraEnFranjaMediaHora('13:00')).toBe(true);
+    expect(esHoraEnFranjaMediaHora('13:30')).toBe(true);
+    expect(esHoraEnFranjaMediaHora('13:30:00')).toBe(true);
+    expect(esHoraEnFranjaMediaHora('13:15')).toBe(false);
+    expect(esHoraEnFranjaMediaHora('')).toBe(false);
   });
 
   test('rechaza fechas y horas inválidas', () => {

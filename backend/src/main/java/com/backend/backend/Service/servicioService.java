@@ -3,6 +3,8 @@ package com.backend.backend.Service;
 import com.backend.backend.DTO.*;
 import com.backend.backend.Exception.categoriaNoEncontradaException;
 import com.backend.backend.Exception.formatoInvalidoException;
+import com.backend.backend.Exception.insumoNoEncontradoException;
+import com.backend.backend.Exception.multimediaNoEncontradaException;
 import com.backend.backend.Exception.proveedorNoEncontradoException;
 import com.backend.backend.Exception.servicioNoEncontradoException;
 import com.backend.backend.Model.categoriaModel;
@@ -68,6 +70,14 @@ public class servicioService {
         return convertirADTO(servicio, servicio.getCategoria(), proveedor);
     }
     
+    // HU-007: catálogo completo del Proveedor autenticado
+    public List<servicioResponseDTO> listarServiciosProveedor(String email) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        return servicioRepository.findByProveedor(proveedor).stream()
+            .map(servicio -> convertirADTO(servicio, servicio.getCategoria(), proveedor))
+            .collect(Collectors.toList());
+    }
+
     @Transactional
     public servicioResponseDTO actualizarServicio(String email, Integer idServicio, actualizarServicioDTO dto) {
         proveedorModel proveedor = obtenerProveedorPorEmail(email);
@@ -108,34 +118,10 @@ public class servicioService {
             .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
         
         
-        // VALIDACIÓN ESTRICTA: Cruzar tipo_archivo con la extensión 
-        String url = dto.getUrl_archivo();
-        if (url == null || url.trim().isEmpty()) {
-            throw new formatoInvalidoException("La URL del archivo no puede estar vacía.");
-        }
-        
-        String urlMinuscula = url.toLowerCase().trim();
-        boolean esImagen = urlMinuscula.endsWith(".jpg") || urlMinuscula.endsWith(".jpeg") || 
-                           urlMinuscula.endsWith(".png") || urlMinuscula.endsWith(".gif") || 
-                           urlMinuscula.endsWith(".webp");
-                           
-        boolean esVideo = urlMinuscula.endsWith(".mp4") || urlMinuscula.endsWith(".mov") || 
-                          urlMinuscula.endsWith(".avi") || urlMinuscula.endsWith(".mkv");
-
-        // Validamos que el tipo declarado coincida con la extensión de la URL
-        if (dto.getTipo_archivo() != null && dto.getTipo_archivo().name().equals("foto")) {
-            if (!esImagen) {
-                throw new formatoInvalidoException("Si el tipo es 'foto', la URL debe terminar en una extensión de imagen (jpg, png, etc).");
-            }
-        } else if (dto.getTipo_archivo() != null && dto.getTipo_archivo().name().equals("video")) {
-            if (!esVideo) {
-                throw new formatoInvalidoException("Si el tipo es 'video', la URL debe terminar en una extensión de video (mp4, mov, etc).");
-            }
-        } else {
-            // Si el tipo es nulo o inválido (por si acaso)
-            throw new formatoInvalidoException("El tipo de archivo debe ser 'foto' o 'video'.");
-        }
-        // ---------------------------------------------------------
+        // HU-008 trabaja únicamente con URL: se valida que sea una URL http(s)
+        // válida. No se exige extensión de archivo porque el frontend admite
+        // cualquier URL de imagen o video (CDN, proxies, etc.).
+        String url = validarUrlMultimedia(dto.getUrl_archivo());
 
         servicio_multimediaModel multimedia = new servicio_multimediaModel();
         multimedia.setServicio(servicio);
@@ -154,6 +140,36 @@ public class servicioService {
         return servicioMultimediaRepository.findByServicio(servicio).stream()
             .map(m -> new MultimediaDTO(m.getId_multimedia(), m.getTipo_archivo().name(), m.getUrl_archivo(), m.getOrden()))
             .collect(Collectors.toList());
+    }
+
+    // HU-008: actualizar una fotografía o video del servicio
+    @Transactional
+    public MultimediaDTO actualizarMultimedia(String email, Integer idServicio, Integer idMultimedia,
+                                              multimediaRequestDTO dto) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = servicioRepository.buscarPorIdYProveedor(idServicio, proveedor)
+            .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
+        servicio_multimediaModel multimedia = obtenerMultimediaDelServicio(idMultimedia, servicio);
+
+        multimedia.setTipo_archivo(dto.getTipo_archivo());
+        multimedia.setUrl_archivo(validarUrlMultimedia(dto.getUrl_archivo()));
+        if (dto.getOrden() != null) {
+            multimedia.setOrden(dto.getOrden());
+        }
+
+        servicio_multimediaModel guardado = servicioMultimediaRepository.save(multimedia);
+        return new MultimediaDTO(guardado.getId_multimedia(), guardado.getTipo_archivo().name(),
+            guardado.getUrl_archivo(), guardado.getOrden());
+    }
+
+    // HU-008: eliminar una fotografía o video del servicio
+    @Transactional
+    public void eliminarMultimedia(String email, Integer idServicio, Integer idMultimedia) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = servicioRepository.buscarPorIdYProveedor(idServicio, proveedor)
+            .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
+        servicio_multimediaModel multimedia = obtenerMultimediaDelServicio(idMultimedia, servicio);
+        servicioMultimediaRepository.delete(multimedia);
     }
 
     @Transactional
@@ -179,8 +195,78 @@ public class servicioService {
             .map(i -> new InsumoDTO(i.getId_insumo(), i.getNombre(), i.getTipo().name()))
             .collect(Collectors.toList());
     }
+
+    // HU-008: actualizar un producto, insumo o equipo del servicio
+    @Transactional
+    public InsumoDTO actualizarInsumo(String email, Integer idServicio, Integer idInsumo, insumoRequestDTO dto) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = servicioRepository.buscarPorIdYProveedor(idServicio, proveedor)
+            .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
+        servicio_insumoModel insumo = obtenerInsumoDelServicio(idInsumo, servicio);
+
+        insumo.setNombre(dto.getNombre().trim());
+        insumo.setTipo(dto.getTipo());
+
+        servicio_insumoModel guardado = servicioInsumoRepository.save(insumo);
+        return new InsumoDTO(guardado.getId_insumo(), guardado.getNombre(), guardado.getTipo().name());
+    }
+
+    // HU-008: eliminar un producto, insumo o equipo del servicio
+    @Transactional
+    public void eliminarInsumo(String email, Integer idServicio, Integer idInsumo) {
+        proveedorModel proveedor = obtenerProveedorPorEmail(email);
+        servicioModel servicio = servicioRepository.buscarPorIdYProveedor(idServicio, proveedor)
+            .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
+        servicio_insumoModel insumo = obtenerInsumoDelServicio(idInsumo, servicio);
+        servicioInsumoRepository.delete(insumo);
+    }
     
     // Métodos auxiliares
+
+    /**
+     * HU-008 trabaja únicamente con URL: se valida que sea una URL http(s)
+     * sin espacios. No se exige extensión porque el frontend admite
+     * cualquier referencia de imagen o video.
+     */
+    private String validarUrlMultimedia(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            throw new formatoInvalidoException("La URL del archivo no puede estar vacía.");
+        }
+        String limpia = url.trim();
+        if (!limpia.matches("(?i)^https?://\\S+$")) {
+            throw new formatoInvalidoException("La URL debe iniciar con http:// o https:// y no contener espacios.");
+        }
+        return limpia;
+    }
+
+    private servicio_multimediaModel obtenerMultimediaDelServicio(Integer idMultimedia, servicioModel servicio) {
+        servicio_multimediaModel multimedia = servicioMultimediaRepository.findById(idMultimedia)
+            .orElseThrow(() -> new multimediaNoEncontradaException(
+                "La multimedia con ID " + idMultimedia + " no existe"));
+
+        if (multimedia.getServicio() == null
+                || !multimedia.getServicio().getId_servicio().equals(servicio.getId_servicio())) {
+            throw new multimediaNoEncontradaException(
+                "La multimedia con ID " + idMultimedia + " no pertenece al servicio indicado");
+        }
+
+        return multimedia;
+    }
+
+    private servicio_insumoModel obtenerInsumoDelServicio(Integer idInsumo, servicioModel servicio) {
+        servicio_insumoModel insumo = servicioInsumoRepository.findById(idInsumo)
+            .orElseThrow(() -> new insumoNoEncontradoException(
+                "El producto, insumo o equipo con ID " + idInsumo + " no existe"));
+
+        if (insumo.getServicio() == null
+                || !insumo.getServicio().getId_servicio().equals(servicio.getId_servicio())) {
+            throw new insumoNoEncontradoException(
+                "El producto, insumo o equipo con ID " + idInsumo + " no pertenece al servicio indicado");
+        }
+
+        return insumo;
+    }
+
     private proveedorModel obtenerProveedorPorEmail(String email) {
         usuarioModel usuario = usuarioRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         return proveedorRepository.findByUsuario(usuario).orElseThrow(() -> new proveedorNoEncontradoException("Proveedor no encontrado"));

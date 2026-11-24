@@ -20,6 +20,7 @@ import {
   describirHoraFin,
   esFechaHoraFutura,
   esFechaValida,
+  esHoraEnFranjaMediaHora,
   esHoraValida,
   formatearFechaHora,
   formatearLocalDateTime,
@@ -68,7 +69,7 @@ const MAPA_CAMPOS_BACKEND = {
 
 const mensajePareceDeHorario = (mensaje) =>
   typeof mensaje === 'string' &&
-  /(horario|periodo no disponible|no está disponible en la fecha|disponibilidad del proveedor)/i.test(
+  /(horario|periodo no disponible|no está disponible en la fecha|disponibilidad del proveedor|media hora)/i.test(
     mensaje
   );
 
@@ -458,6 +459,9 @@ const FormularioSolicitud = ({
       nuevosErrores.hora = 'La hora es obligatoria';
     } else if (!esHoraValida(formulario.hora)) {
       nuevosErrores.hora = 'La hora no es válida';
+    } else if (!esHoraEnFranjaMediaHora(formulario.hora)) {
+      nuevosErrores.hora =
+        'La hora de inicio debe ser en punto o a la media hora (:00 o :30)';
     }
 
     if (
@@ -985,7 +989,7 @@ const FormularioSolicitud = ({
                   className={`form-control ${errores.hora ? 'is-invalid' : ''}`}
                   value={formulario.hora}
                   onChange={handleChange}
-                  step="60"
+                  step="1800"
                   required
                   disabled={enviando}
                   aria-invalid={!!errores.hora}
@@ -997,7 +1001,7 @@ const FormularioSolicitud = ({
                   </div>
                 ) : (
                   <div id="ayuda-solicitud-hora" className="form-text">
-                    La solicitud debe quedar en el futuro.
+                    Debe quedar en el futuro y en punto o a la media hora (:00 o :30).
                   </div>
                 )}
               </div>

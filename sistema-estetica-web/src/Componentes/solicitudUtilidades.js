@@ -42,6 +42,17 @@ export const esHoraValida = (valor) =>
   typeof valor === 'string' && expresionHora.test(valor.trim());
 
 /**
+ * El backend actual solo admite reservas en punto o a la media hora
+ * (`:00` o `:30`). Se valida también en el navegador para avisar antes de
+ * enviar la solicitud.
+ */
+export const esHoraEnFranjaMediaHora = (valor) => {
+  if (!esHoraValida(valor)) return false;
+  const minutos = valor.trim().split(':')[1];
+  return minutos === '00' || minutos === '30';
+};
+
+/**
  * Normaliza la hora al formato que espera el backend (HH:mm:ss).
  */
 export const normalizarHora = (hora) => {

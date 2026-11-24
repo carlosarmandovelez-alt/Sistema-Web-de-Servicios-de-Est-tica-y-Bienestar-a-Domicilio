@@ -38,17 +38,16 @@ public class solicitudController {
 
     // HU-013: Endpoints del Cliente
 
-    
+    /**
+     * Devuelve SIEMPRE un arreglo JSON. Un Cliente sin solicitudes recibe
+     * `[]`, que es lo que el frontend usa para mostrar el estado vacío.
+     * (Antes se devolvía un objeto {"mensaje": ...}, lo que rompía la
+     * deserialización del frontend).
+     */
     @GetMapping("/mis-solicitudes")
-    public ResponseEntity<?> listarSolicitudesCliente(Authentication authentication) {
+    public ResponseEntity<List<solicitudResponseDTO>> listarSolicitudesCliente(Authentication authentication) {
         String email = authentication.getName();
         List<solicitudResponseDTO> solicitudes = solicitudService.listarSolicitudesCliente(email);
-        
-        if (solicitudes.isEmpty()) {
-            Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("mensaje", "No tienes solicitudes registradas actualmente.");
-            return ResponseEntity.status(HttpStatus.OK).body(respuesta); 
-        }
         return ResponseEntity.ok(solicitudes);
     }
 
@@ -64,17 +63,14 @@ public class solicitudController {
 
     // HU-014: Endpoints del Proveedor
 
-    
+    /**
+     * Devuelve SIEMPRE un arreglo JSON. Un Proveedor sin solicitudes recibe
+     * `[]` para que el frontend muestre el estado vacío.
+     */
     @GetMapping("/recibidas")
-    public ResponseEntity<?> listarSolicitudesRecibidas(Authentication authentication) {
+    public ResponseEntity<List<solicitudResponseDTO>> listarSolicitudesRecibidas(Authentication authentication) {
         String email = authentication.getName();
         List<solicitudResponseDTO> solicitudes = solicitudService.listarSolicitudesProveedor(email);
-        
-        if (solicitudes.isEmpty()) {
-            Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("mensaje", "No has recibido solicitudes de servicio.");
-            return ResponseEntity.status(HttpStatus.OK).body(respuesta);
-        }
         return ResponseEntity.ok(solicitudes);
     }
 

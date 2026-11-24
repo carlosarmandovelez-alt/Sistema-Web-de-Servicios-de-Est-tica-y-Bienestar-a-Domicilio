@@ -20,10 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
 public class solicitudService {
+
+    private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm");
 
     @Autowired
     private solicitudReservaRepository solicitudReservaRepository;
@@ -66,8 +69,9 @@ public class solicitudService {
             throw new disponibilidadException("El servicio no se encuentra disponible");
         }
 
-        // 3. Validar disponibilidad del proveedor (CA-03 y CA-04)
-        validarDisponibilidad(servicio.getProveedor(), dto.getFecha_hora_solicitada());
+        // 3. Validar disponibilidad del proveedor (CA-03 y CA-04).
+        // Se valida el bloque completo: inicio + duración del servicio.
+        validarDisponibilidad(servicio.getProveedor(), dto.getFecha_hora_solicitada(), servicio.getDuracion_minutos());
 
         //validar horas terminando en 00 o 30
         int minutos = dto.getFecha_hora_solicitada().getMinute();
@@ -177,9 +181,30 @@ public class solicitudService {
 
     // Lógica de Validación (CA-03 y CA-04)
 
-    private void validarDisponibilidad(proveedorModel proveedor, LocalDateTime fechaSolicitada) {
+    /**
+     * Valida que la solicitud completa (inicio + duración conservada) quepa
+     * dentro de la disponibilidad habitual del Proveedor y fuera de sus
+     * periodos de excepción.
+     *
+     * HU-012 exige comprobar el bloque completo de atención, no solo la hora
+     * de inicio: una cita de 60 minutos a las 10:30 no es válida si el
+     * Proveedor atiende hasta las 11:00.
+     */
+    private void validarDisponibilidad(proveedorModel proveedor, LocalDateTime fechaSolicitada, Integer duracionMinutos) {
+        if (fechaSolicitada == null) {
+            throw new disponibilidadException("La fecha y hora de la solicitud es obligatoria");
+        }
+
         LocalDate fecha = fechaSolicitada.toLocalDate();
         LocalTime hora = fechaSolicitada.toLocalTime();
+
+        int duracion = (duracionMinutos == null || duracionMinutos < 0) ? 0 : duracionMinutos;
+        LocalTime horaFin = hora.plusMinutes(duracion);
+
+        // La disponibilidad se define dentro de un mismo día (hora_inicio <
+        // hora_fin), por lo que un servicio que termina al día siguiente nunca
+        // puede caber en el horario habitual.
+        boolean cruzaMedianoche = duracion > 0 && !horaFin.isAfter(hora);
 
         // 1. Verificar periodos no disponibles (ej. vacaciones)
         List<periodoNoDisponibleModel> periodos = periodoNoDisponibleRepository.findByProveedor(proveedor);
@@ -189,24 +214,44 @@ public class solicitudService {
             }
         }
 
-        // 2. Verificar día de la semana y horario
+        // 2. Verificar día de la semana y horario habitual
         diaSemanaModel diaEnum = traducirDiaSemanaEnum(fecha.getDayOfWeek().name());
-        
+
         List<disponibilidadModel> disponibilidades = disponibilidadRepository.findByProveedor(proveedor);
-        boolean horarioValido = false;
+
+        boolean inicioDentroDeHorario = false;
+        boolean duracionDentroDeHorario = false;
 
         for (disponibilidadModel disp : disponibilidades) {
-            if (disp.getDia_semana() == diaEnum) {
-                // Verifica si la hora está dentro del rango (hora inicio <= hora solicitada < hora fin)
-                if (!hora.isBefore(disp.getHora_inicio()) && hora.isBefore(disp.getHora_fin())) {
-                    horarioValido = true;
-                    break;
-                }
+            if (disp.getDia_semana() != diaEnum) {
+                continue;
+            }
+
+            // El inicio debe estar dentro del rango [hora_inicio, hora_fin)
+            if (hora.isBefore(disp.getHora_inicio()) || !hora.isBefore(disp.getHora_fin())) {
+                continue;
+            }
+
+            inicioDentroDeHorario = true;
+
+            // La hora de finalización del servicio debe caber en el mismo rango
+            if (!cruzaMedianoche && !horaFin.isAfter(disp.getHora_fin())) {
+                duracionDentroDeHorario = true;
+                break;
             }
         }
 
-        if (!horarioValido) {
+        if (!inicioDentroDeHorario) {
             throw new disponibilidadException("El horario solicitado no se encuentra dentro de la disponibilidad del proveedor");
+        }
+
+        if (!duracionDentroDeHorario) {
+            throw new disponibilidadException(
+                "El horario solicitado no se encuentra dentro de la disponibilidad del proveedor: " +
+                "el servicio de " + duracion + " minutos terminaría a las " +
+                horaFin.format(FORMATO_HORA) +
+                ", fuera del horario de atención."
+            );
         }
     }
 
@@ -265,7 +310,7 @@ public class solicitudService {
         solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
 
         // Revalidar que el horario siga estando disponible (CA-02)
-        validarDisponibilidad(proveedor, solicitud.getFecha_hora_solicitada());
+        validarDisponibilidad(proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
 
         // Validar solapamiento (CA-03)
         validarSolapamiento(proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
@@ -303,7 +348,7 @@ public class solicitudService {
         solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
 
         // Validar que el nuevo horario esté en la disponibilidad (CA-07)
-        validarDisponibilidad(proveedor, nuevaFecha);
+        validarDisponibilidad(proveedor, nuevaFecha, solicitud.getDuracion_snapshot_minutos());
 
         solicitud.setEstado(estadoSolicitudModel.sugerida);
         solicitud.setFecha_hora_propuesta(nuevaFecha);
@@ -321,7 +366,7 @@ public class solicitudService {
         solicitud_reservaModel solicitud = obtenerSolicitudSugeridaDelCliente(idSolicitud, cliente);
 
         // Revalidar disponibilidad y solapamiento (CA-02 y CA-03)
-        validarDisponibilidad(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta());
+        validarDisponibilidad(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
         validarSolapamiento(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
 
         // Cambiar a Aceptada

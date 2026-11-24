@@ -181,6 +181,24 @@ describe('HU-012: formulario de creación de solicitud', () => {
     expect(crearSolicitud).not.toHaveBeenCalled();
   });
 
+  test('rechaza una hora que no sea en punto ni a la media hora', async () => {
+    renderizar();
+    await esperarFormulario();
+    completarFormulario();
+
+    fireEvent.change(screen.getByLabelText(/Hora de inicio/), {
+      target: { value: '10:15' },
+    });
+    confirmar();
+
+    expect(
+      await screen.findByText(
+        'La hora de inicio debe ser en punto o a la media hora (:00 o :30)'
+      )
+    ).toBeInTheDocument();
+    expect(crearSolicitud).not.toHaveBeenCalled();
+  });
+
   test('envía exactamente el DTO de HU-012 y muestra la confirmación del backend', async () => {
     renderizar();
     await esperarFormulario();

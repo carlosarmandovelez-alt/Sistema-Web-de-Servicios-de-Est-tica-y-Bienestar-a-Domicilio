@@ -22,6 +22,7 @@ public class crearSolicitudDTO {
     @Size(max = 255, message = "La dirección no puede superar los 255 caracteres")
     private String direccion_texto;
     
+    @NotBlank(message = "El barrio o sector es obligatorio")
     @Size(max = 150, message = "El barrio o sector no puede superar los 150 caracteres")
     private String barrio_sector;
     
