@@ -234,6 +234,7 @@ export const GestionInformacionComplementaria = ({
   const validarMultimedia = () => {
     const nuevosErrores = {};
     const url = (formMultimedia.url_archivo || '').trim();
+    const tipo = formMultimedia.tipo_archivo;
 
     if (!url) {
       nuevosErrores.url_archivo = 'La URL de la fotografía o video es obligatoria';
@@ -242,9 +243,27 @@ export const GestionInformacionComplementaria = ({
     } else if (!/^https?:\/\/\S+$/i.test(url)) {
       nuevosErrores.url_archivo =
         'La URL debe iniciar con http:// o https:// y no contener espacios';
+    } else {
+      // Cruzar el tipo de archivo con la extensión de la URL
+      const urlSinParams = url.toLowerCase().split('?')[0];
+      
+      const esImagen = urlSinParams.endsWith('.jpg') || urlSinParams.endsWith('.jpeg') || 
+                       urlSinParams.endsWith('.png') || urlSinParams.endsWith('.gif') || 
+                       urlSinParams.endsWith('.webp');
+                       
+      const esVideo = urlSinParams.endsWith('.mp4') || urlSinParams.endsWith('.mov') || 
+                      urlSinParams.endsWith('.avi') || urlSinParams.endsWith('.mkv');
+
+      if (tipo === 'foto' && !esImagen) {
+        nuevosErrores.url_archivo =
+          'Como seleccionaste Fotografía, la URL debe terminar en un formato de imagen (ej. .jpg, .png).';
+      } else if (tipo === 'video' && !esVideo) {
+        nuevosErrores.url_archivo =
+          'Como seleccionaste Video, la URL debe terminar en un formato de video (ej. .mp4, .mov).';
+      }
     }
 
-    if (!['foto', 'video'].includes(formMultimedia.tipo_archivo)) {
+    if (!['foto', 'video'].includes(tipo)) {
       nuevosErrores.tipo_archivo = 'Selecciona Fotografía o Video';
     }
 
