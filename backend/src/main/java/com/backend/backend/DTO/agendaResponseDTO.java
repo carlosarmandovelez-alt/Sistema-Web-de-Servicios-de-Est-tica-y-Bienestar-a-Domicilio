@@ -14,6 +14,7 @@ public class agendaResponseDTO {
     private String nombre_servicio;
     private LocalDateTime fecha_hora_inicio;
     private LocalDateTime fecha_hora_fin; // Calculada
+    private Integer duracion_snapshot_minutos;
     private String nombre_cliente;
     private String direccion_texto;
     private String barrio_sector;

@@ -3,6 +3,7 @@ import {
   cancelarSolicitudCliente,
   cancelarSolicitudProveedor,
   completarServicio,
+  consultarAgenda,
   consultarDetalleRecibida,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
@@ -596,6 +597,84 @@ describe('HU-018: finalización del servicio', () => {
     global.fetch = jest.fn();
 
     await expect(completarServicio(null, 18)).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('HU-019: consulta de la agenda del Proveedor', () => {
+  const fetchOriginal = global.fetch;
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    jest.restoreAllMocks();
+  });
+
+  test('consulta la agenda con GET y el JWT del Proveedor', async () => {
+    const agenda = [
+      {
+        id_solicitud: 19,
+        nombre_servicio: 'Masaje relajante',
+        fecha_hora_inicio: '2026-12-07T10:30:00',
+        fecha_hora_fin: '2026-12-07T12:00:00',
+        duracion_snapshot_minutos: 90,
+      },
+    ];
+    global.fetch = jest.fn().mockResolvedValue(respuesta(200, agenda));
+
+    const data = await consultarAgenda('token-proveedor');
+
+    expect(data).toEqual(agenda);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/recibidas/agenda',
+      {
+        method: 'GET',
+        headers: { Authorization: 'Bearer token-proveedor' },
+      }
+    );
+  });
+
+  test('acepta una agenda vacía como respuesta exitosa', async () => {
+    global.fetch = jest.fn().mockResolvedValue(respuesta(200, []));
+
+    await expect(consultarAgenda('token-proveedor')).resolves.toEqual([]);
+  });
+
+  test('rechaza una respuesta que no sea un arreglo', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, { resultado: 'inesperado' })
+    );
+
+    await expect(consultarAgenda('token-proveedor')).rejects.toThrow(
+      'El servidor devolvió una respuesta no válida. Inténtalo de nuevo.'
+    );
+  });
+
+  test('tolera la respuesta antigua de agenda vacía con mensaje', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, { mensaje: 'No tienes reservas aceptadas en tu agenda.' })
+    );
+
+    await expect(consultarAgenda('token-proveedor')).resolves.toEqual([]);
+  });
+
+  test('marca el 403 como error de autenticación', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(403, { error: 'Acceso denegado' })
+    );
+
+    await expect(consultarAgenda('token-proveedor')).rejects.toMatchObject({
+      status: 403,
+      esErrorAutenticacion: true,
+    });
+  });
+
+  test('no llama al backend sin token de Proveedor', async () => {
+    global.fetch = jest.fn();
+
+    await expect(consultarAgenda(null)).rejects.toMatchObject({
       status: 401,
       esErrorAutenticacion: true,
     });

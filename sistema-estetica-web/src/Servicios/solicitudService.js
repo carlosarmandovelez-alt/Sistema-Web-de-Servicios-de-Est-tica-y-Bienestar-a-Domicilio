@@ -271,6 +271,48 @@ export const consultarDetalleRecibida = async (
 };
 
 /**
+ * HU-019: consulta la agenda cronológica de reservas Aceptadas del Proveedor
+ * autenticado.
+ *
+ * Endpoint real:
+ *   GET /api/solicitudes/recibidas/agenda
+ *
+ * El backend obtiene el Proveedor desde el JWT, filtra por estado `aceptada`
+ * y ordena por fecha y hora de inicio ascendente. La respuesta es siempre un
+ * arreglo; una agenda vacía llega como `[]`.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {{ signal?: AbortSignal }} opciones
+ * @returns {Promise<Array<Object>>} Lista de agendaResponseDTO.
+ */
+export const consultarAgenda = async (token, { signal } = {}) => {
+  const data = await peticionGetAutenticada(
+    token,
+    `${API_URL}/recibidas/agenda`,
+    { signal },
+    'Error al consultar tu agenda'
+  );
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // Compatibilidad con versiones anteriores del backend, que respondían
+  // { mensaje: "..." } cuando la agenda estaba vacía. La versión actual
+  // devuelve siempre un arreglo vacío.
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.mensaje === 'string' &&
+    data.id_solicitud === undefined
+  ) {
+    return [];
+  }
+
+  throw new Error('El servidor devolvió una respuesta no válida. Inténtalo de nuevo.');
+};
+
+/**
  * Ejecuta un PATCH autenticado sobre una solicitud y devuelve el
  * solicitudResponseDTO confirmado por el backend.
  *

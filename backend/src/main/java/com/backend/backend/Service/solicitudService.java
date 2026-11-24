@@ -674,6 +674,7 @@ public class solicitudService {
 
 
     // HU-019: Consultar Agenda del Proveedor
+    @Transactional(readOnly = true)
     public List<agendaResponseDTO> consultarAgenda(String emailProveedor) {
         // 1. Obtener el proveedor autenticado (esto ya valida CA-05 y CA-06 por seguridad)
         proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
@@ -683,14 +684,16 @@ public class solicitudService {
 
         // 3. Mapear al DTO calculando la hora de fin (CA-02 y CA-03)
         return reservas.stream().map(reserva -> {
-            // Cálculo de la hora de finalización
-            LocalDateTime horaFin = reserva.getFecha_hora_solicitada().plusMinutes(reserva.getDuracion_snapshot_minutos());
+            // Cálculo de la hora de finalización con la duración histórica.
+            LocalDateTime horaFin = reserva.getFecha_hora_solicitada()
+                .plusMinutes(reserva.getDuracion_snapshot_minutos());
 
             return new agendaResponseDTO(
                 reserva.getId_solicitud(),
                 reserva.getNombre_servicio_snapshot(),
                 reserva.getFecha_hora_solicitada(),
                 horaFin,
+                reserva.getDuracion_snapshot_minutos(),
                 reserva.getCliente().getUsuario().getNombre() + " " + reserva.getCliente().getUsuario().getApellido(),
                 reserva.getDireccion_texto(),
                 reserva.getBarrio_sector()

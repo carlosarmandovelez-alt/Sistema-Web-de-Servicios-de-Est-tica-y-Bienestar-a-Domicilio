@@ -4,6 +4,7 @@ import com.backend.backend.Model.clienteModel;
 import com.backend.backend.Model.proveedorModel;
 import com.backend.backend.Model.solicitud_reservaModel;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -64,8 +65,10 @@ public interface solicitudReservaRepository extends JpaRepository<solicitud_rese
     @Query("SELECT s FROM solicitud_reservaModel s WHERE s.proveedor = :proveedor AND s.estado = 'aceptada'")
     List<solicitud_reservaModel> findReservasAceptadasByProveedor(@Param("proveedor") proveedorModel proveedor);
 
-    // HU-019: Buscar reservas aceptadas ordenadas cronológicamente
-    @Query("SELECT s FROM solicitud_reservaModel s WHERE s.proveedor = :proveedor AND s.estado = 'aceptada' ORDER BY s.fecha_hora_solicitada ASC")
+    // HU-019: Buscar reservas aceptadas ordenadas cronológicamente.
+    // El EntityGraph evita consultas N+1 al recuperar el Cliente y su Usuario.
+    @EntityGraph(attributePaths = {"cliente", "cliente.usuario"})
+    @Query("SELECT s FROM solicitud_reservaModel s WHERE s.proveedor = :proveedor AND s.estado = 'aceptada' ORDER BY s.fecha_hora_solicitada ASC, s.id_solicitud ASC")
     List<solicitud_reservaModel> findAgendaAceptadaByProveedor(@Param("proveedor") proveedorModel proveedor);
     
 }

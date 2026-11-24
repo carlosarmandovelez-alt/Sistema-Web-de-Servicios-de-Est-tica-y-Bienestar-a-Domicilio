@@ -13,9 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map; 
 
 @RestController
 @RequestMapping("/api/solicitudes")
@@ -160,16 +158,13 @@ public class solicitudController {
 
 
     // HU-019: Endpoint de Agenda
-    
+
+    /**
+     * Devuelve SIEMPRE un arreglo JSON. Un Proveedor sin reservas aceptadas
+     * recibe `[]` para que el frontend distinga la agenda vacía de un error.
+     */
     @GetMapping("/recibidas/agenda")
-    public ResponseEntity<?> consultarAgenda(Authentication authentication) {
-        List<agendaResponseDTO> agenda = solicitudService.consultarAgenda(authentication.getName());
-        
-        if (agenda.isEmpty()) {
-            Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("mensaje", "No tienes reservas aceptadas en tu agenda.");
-            return ResponseEntity.status(HttpStatus.OK).body(respuesta);
-        }
-        return ResponseEntity.ok(agenda);
+    public ResponseEntity<List<agendaResponseDTO>> consultarAgenda(Authentication authentication) {
+        return ResponseEntity.ok(solicitudService.consultarAgenda(authentication.getName()));
     }
 }

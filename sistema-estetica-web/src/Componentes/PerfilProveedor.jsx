@@ -8,10 +8,12 @@ import { RegistrarServicio } from './RegistrarServicio';
 import { GestionInformacionComplementaria } from './GestionInformacionComplementaria';
 import { GestionDisponibilidad } from './GestionDisponibilidad';
 import { SolicitudesRecibidas } from './SolicitudesRecibidas';
+import { MiAgenda } from './MiAgenda';
 
 const TABS = {
   PERFIL: 'perfil',
   SOLICITUDES: 'solicitudes',
+  AGENDA: 'agenda',
   SERVICIOS: 'servicios',
   COMPLEMENTARIA: 'complementaria',
   DISPONIBILIDAD: 'disponibilidad',
@@ -427,6 +429,17 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
           <button
             type="button"
             role="tab"
+            aria-selected={tabActiva === TABS.AGENDA}
+            className={`nav-link ${tabActiva === TABS.AGENDA ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.AGENDA)}
+          >
+            Mi agenda
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
             aria-selected={tabActiva === TABS.SERVICIOS}
             className={`nav-link ${tabActiva === TABS.SERVICIOS ? 'active fw-semibold' : 'text-secondary'}`}
             onClick={() => setTabActiva(TABS.SERVICIOS)}
@@ -476,6 +489,11 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
 
       {tabActiva === TABS.SOLICITUDES ? (
         <SolicitudesRecibidas
+          sesion={sesion}
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.AGENDA ? (
+        <MiAgenda
           sesion={sesion}
           onCerrarSesion={onCerrarSesion}
         />
