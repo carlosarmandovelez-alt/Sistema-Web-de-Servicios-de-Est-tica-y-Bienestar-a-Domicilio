@@ -269,3 +269,184 @@ export const consultarDetalleRecibida = async (
 
   return data;
 };
+
+/**
+ * Ejecuta un PATCH autenticado sobre una solicitud y devuelve el
+ * solicitudResponseDTO confirmado por el backend.
+ *
+ * Lo comparten HU-015 (respuesta del Proveedor) y HU-016 (respuesta del
+ * Cliente a una contrapropuesta).
+ */
+const peticionPatchSolicitud = async (
+  token,
+  url,
+  cuerpo,
+  fallbackMensaje,
+  { signal } = {}
+) => {
+  if (!token) {
+    const error = new Error('No hay una sesión activa con token');
+    error.status = 401;
+    error.esErrorAutenticacion = true;
+    throw error;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        ...(cuerpo ? { 'Content-Type': 'application/json' } : {}),
+        Authorization: `Bearer ${token}`,
+      },
+      ...(cuerpo ? { body: JSON.stringify(cuerpo) } : {}),
+      ...(signal ? { signal } : {}),
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    throw new Error(
+      'No fue posible conectar con el servidor. Verifica tu conexión a internet.'
+    );
+  }
+
+  if (!response.ok) {
+    await manejarErrorRespuesta(response, fallbackMensaje);
+  }
+
+  try {
+    const data = await response.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error();
+    }
+    return data;
+  } catch {
+    throw new Error('El servidor devolvió una respuesta no válida. Inténtalo de nuevo.');
+  }
+};
+
+/**
+ * HU-015: petición PATCH autenticada del Proveedor sobre una solicitud
+ * recibida.
+ */
+const peticionRespuestaProveedor = (token, idSolicitud, accion, cuerpo, { signal } = {}) => {
+  const fallback =
+    accion === 'aceptar'
+      ? 'Error al aceptar la solicitud'
+      : accion === 'rechazar'
+        ? 'Error al rechazar la solicitud'
+        : 'Error al proponer un nuevo horario';
+
+  return peticionPatchSolicitud(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/${accion}`,
+    cuerpo,
+    fallback,
+    { signal }
+  );
+};
+
+/**
+ * HU-016: petición PATCH autenticada del Cliente sobre una solicitud propia.
+ */
+const peticionRespuestaCliente = (token, idSolicitud, accion, cuerpo, { signal } = {}) => {
+  const fallback =
+    accion === 'aceptar-propuesta'
+      ? 'Error al aceptar la contrapropuesta'
+      : 'Error al rechazar la contrapropuesta';
+
+  return peticionPatchSolicitud(
+    token,
+    `${API_URL}/mis-solicitudes/${encodeURIComponent(idSolicitud)}/${accion}`,
+    cuerpo,
+    fallback,
+    { signal }
+  );
+};
+
+/**
+ * HU-015 CA-01: acepta una solicitud pendiente del Proveedor autenticado.
+ * El backend valida propiedad, estado Pendiente, disponibilidad y
+ * solapamiento con reservas aceptadas.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {number|string} idSolicitud
+ * @returns {Promise<Object>} solicitudResponseDTO en estado aceptada.
+ */
+export const aceptarSolicitud = async (token, idSolicitud, { signal } = {}) =>
+  peticionRespuestaProveedor(token, idSolicitud, 'aceptar', null, { signal });
+
+/**
+ * HU-015 CA-04: rechaza una solicitud pendiente con un motivo obligatorio.
+ * El backend valida que el motivo no esté vacío.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {number|string} idSolicitud
+ * @param {string} motivo
+ * @returns {Promise<Object>} solicitudResponseDTO en estado rechazada.
+ */
+export const rechazarSolicitud = async (token, idSolicitud, motivo, { signal } = {}) =>
+  peticionRespuestaProveedor(
+    token,
+    idSolicitud,
+    'rechazar',
+    { motivo_rechazo: motivo },
+    { signal }
+  );
+
+/**
+ * HU-015 CA-06: registra una contrapropuesta de fecha y hora.
+ * El backend valida disponibilidad y que el horario sea distinto al solicitado.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {number|string} idSolicitud
+ * @param {string} fechaHoraPropuesta "AAAA-MM-DDTHH:mm:ss"
+ * @returns {Promise<Object>} solicitudResponseDTO en estado sugerida.
+ */
+export const proponerHorario = async (
+  token,
+  idSolicitud,
+  fechaHoraPropuesta,
+  { signal } = {}
+) =>
+  peticionRespuestaProveedor(
+    token,
+    idSolicitud,
+    'proponer',
+    { fecha_hora_propuesta: fechaHoraPropuesta },
+    { signal }
+  );
+
+/**
+ * HU-016: acepta la contrapropuesta del Proveedor para una solicitud propia
+ * en estado Sugerida. El backend revalida propiedad, estado, disponibilidad y
+ * solapamiento antes de confirmar.
+ *
+ * @param {string} token JWT del Cliente.
+ * @param {number|string} idSolicitud
+ * @returns {Promise<Object>} solicitudResponseDTO en estado aceptada.
+ */
+export const aceptarContrapropuesta = async (token, idSolicitud, { signal } = {}) =>
+  peticionRespuestaCliente(token, idSolicitud, 'aceptar-propuesta', null, { signal });
+
+/**
+ * HU-016: rechaza la contrapropuesta del Proveedor y cancela la solicitud.
+ * El motivo es opcional; si se envía, el backend lo conserva.
+ *
+ * @param {string} token JWT del Cliente.
+ * @param {number|string} idSolicitud
+ * @param {string} [motivo]
+ * @returns {Promise<Object>} solicitudResponseDTO en estado cancelada.
+ */
+export const rechazarContrapropuesta = async (
+  token,
+  idSolicitud,
+  motivo,
+  { signal } = {}
+) =>
+  peticionRespuestaCliente(
+    token,
+    idSolicitud,
+    'rechazar-propuesta',
+    motivo ? { motivo_rechazo: motivo } : {},
+    { signal }
+  );

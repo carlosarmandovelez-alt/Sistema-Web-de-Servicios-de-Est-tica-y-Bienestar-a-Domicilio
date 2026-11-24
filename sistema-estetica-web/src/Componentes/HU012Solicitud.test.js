@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SolicitudServicio } from './SolicitudServicio';
 import {
+  consultarDisponibilidadProveedor,
   consultarProveedorPorId,
   consultarServicioPorId,
 } from '../Servicios/exploracionService';
@@ -20,15 +21,16 @@ const SESION_CLIENTE = {
   email: 'carlos@example.com',
 };
 
-const crearFechaFutura = () => {
+const crearFechaFutura = (dias = 7) => {
   const fecha = new Date();
-  fecha.setDate(fecha.getDate() + 7);
+  fecha.setDate(fecha.getDate() + dias);
   const dia = String(fecha.getDate()).padStart(2, '0');
   const mes = String(fecha.getMonth() + 1).padStart(2, '0');
   return `${fecha.getFullYear()}-${mes}-${dia}`;
 };
 
 const FECHA = crearFechaFutura();
+const FECHA_ALTERNATIVA = crearFechaFutura(9);
 const [ANIO, MES, DIA] = FECHA.split('-');
 const FECHA_TEXTO = `${DIA}/${MES}/${ANIO}`;
 
@@ -87,6 +89,18 @@ const SOLICITUD_CREADA = {
   id_proveedor: 10,
 };
 
+const DISPONIBILIDAD = {
+  id_proveedor: 10,
+  id_servicio: 100,
+  duracion_minutos: 90,
+  fecha: FECHA,
+  dia_semana: 'jueves',
+  atiende: true,
+  motivo: null,
+  horas_disponibles: ['09:00', '09:30', '10:00', '10:30'],
+  horas_ocupadas: ['11:00'],
+};
+
 const renderizar = (props = {}) =>
   render(
     <SolicitudServicio
@@ -109,11 +123,9 @@ const esperarFormulario = async () => {
   ).toBeInTheDocument();
 };
 
-const completarFormulario = () => {
+const completarFormulario = async () => {
   fireEvent.change(screen.getByLabelText(/^Fecha/), { target: { value: FECHA } });
-  fireEvent.change(screen.getByLabelText(/Hora de inicio/), {
-    target: { value: '10:00' },
-  });
+  fireEvent.click(await screen.findByLabelText('10:00'));
   fireEvent.change(screen.getByLabelText(/Dirección de atención/), {
     target: { value: 'Calle 100 # 20-30' },
   });
@@ -133,6 +145,8 @@ const confirmar = () =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  consultarDisponibilidadProveedor.mockReset();
+  consultarDisponibilidadProveedor.mockResolvedValue(DISPONIBILIDAD);
   consultarServicioPorId.mockResolvedValue(SERVICIO);
   consultarProveedorPorId.mockResolvedValue(PROVEEDOR);
   consultarPerfilCliente.mockResolvedValue(PERFIL_CLIENTE);
@@ -181,28 +195,23 @@ describe('HU-012: formulario de creación de solicitud', () => {
     expect(crearSolicitud).not.toHaveBeenCalled();
   });
 
-  test('rechaza una hora que no sea en punto ni a la media hora', async () => {
+  test('solo ofrece horas en punto o a la media hora', async () => {
     renderizar();
     await esperarFormulario();
-    completarFormulario();
 
-    fireEvent.change(screen.getByLabelText(/Hora de inicio/), {
-      target: { value: '10:15' },
-    });
-    confirmar();
+    fireEvent.change(screen.getByLabelText(/^Fecha/), { target: { value: FECHA } });
 
-    expect(
-      await screen.findByText(
-        'La hora de inicio debe ser en punto o a la media hora (:00 o :30)'
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('09:00')).toBeInTheDocument();
+    expect(screen.getByLabelText('09:30')).toBeInTheDocument();
+    expect(screen.queryByLabelText('09:15')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('10:15')).not.toBeInTheDocument();
     expect(crearSolicitud).not.toHaveBeenCalled();
   });
 
   test('envía exactamente el DTO de HU-012 y muestra la confirmación del backend', async () => {
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     await waitFor(() => expect(crearSolicitud).toHaveBeenCalledTimes(1));
@@ -262,7 +271,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(
@@ -289,7 +298,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(
@@ -326,7 +335,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(
@@ -345,7 +354,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(
@@ -365,7 +374,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(
@@ -389,7 +398,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -410,7 +419,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar();
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
 
     const boton = screen.getByRole('button', { name: 'Confirmar solicitud' });
     fireEvent.click(boton);
@@ -467,7 +476,7 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     renderizar({ onVerMisSolicitudes });
     await esperarFormulario();
-    completarFormulario();
+    await completarFormulario();
     confirmar();
 
     const boton = await screen.findByRole('button', {
@@ -477,5 +486,207 @@ describe('HU-012: formulario de creación de solicitud', () => {
 
     expect(onVerMisSolicitudes).toHaveBeenCalledTimes(1);
     expect(crearSolicitud).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('HU-012: disponibilidad real del Proveedor', () => {
+  const seleccionarFecha = async (fecha = FECHA) => {
+    fireEvent.change(screen.getByLabelText(/^Fecha/), { target: { value: fecha } });
+  };
+
+  test('muestra las horas disponibles y diferencia las ocupadas', async () => {
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+
+    expect(
+      await screen.findByRole('radiogroup', { name: 'Horarios disponibles' })
+    ).toBeInTheDocument();
+
+    ['09:00', '09:30', '10:00', '10:30'].forEach((hora) => {
+      expect(screen.getByLabelText(hora)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Horas no disponibles (otras solicitudes):')).toBeInTheDocument();
+    const ocupada = screen.getByText('11:00');
+    expect(ocupada).toHaveAttribute('aria-disabled', 'true');
+
+    expect(consultarDisponibilidadProveedor).toHaveBeenCalledWith(
+      10,
+      FECHA,
+      100,
+      expect.objectContaining({ signal: expect.anything() })
+    );
+  });
+
+  test('muestra un indicador de carga mientras consulta la disponibilidad', async () => {
+    let resolver;
+    consultarDisponibilidadProveedor.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve;
+      })
+    );
+
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+
+    expect(
+      screen.getByText('Consultando la disponibilidad del Proveedor...')
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      resolver(DISPONIBILIDAD);
+    });
+
+    expect(await screen.findByLabelText('10:00')).toBeInTheDocument();
+  });
+
+  test('informa cuando la fecha cae en un periodo de excepción', async () => {
+    consultarDisponibilidadProveedor.mockResolvedValue({
+      ...DISPONIBILIDAD,
+      atiende: false,
+      motivo: 'PERIODO_NO_DISPONIBLE',
+      horas_disponibles: [],
+      horas_ocupadas: [],
+    });
+
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+
+    expect(
+      await screen.findByText(/periodo de excepción/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  });
+
+  test('informa cuando la consulta falla y permite reintentar', async () => {
+    consultarDisponibilidadProveedor
+      .mockRejectedValueOnce(
+        new Error('No fue posible conectar con el servidor. Verifica tu conexión a internet.')
+      )
+      .mockResolvedValueOnce(DISPONIBILIDAD);
+
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /No fue posible consultar la disponibilidad del Proveedor/i
+    );
+    expect(screen.queryByLabelText('10:00')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByLabelText('10:00')).toBeInTheDocument();
+  });
+
+  test('limpia el horario elegido cuando la nueva fecha no lo ofrece', async () => {
+    consultarDisponibilidadProveedor
+      .mockResolvedValueOnce(DISPONIBILIDAD)
+      .mockResolvedValueOnce({
+        ...DISPONIBILIDAD,
+        fecha: FECHA_ALTERNATIVA,
+        horas_disponibles: ['08:00'],
+        horas_ocupadas: [],
+      });
+
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+    fireEvent.click(await screen.findByLabelText('10:00'));
+
+    expect(screen.getByLabelText('10:00')).toBeChecked();
+
+    await seleccionarFecha(FECHA_ALTERNATIVA);
+
+    expect(await screen.findByLabelText('08:00')).toBeInTheDocument();
+    expect(screen.queryByLabelText('10:00')).not.toBeInTheDocument();
+    expect(screen.getByText('Por definir')).toBeInTheDocument();
+    expect(consultarDisponibilidadProveedor).toHaveBeenCalledTimes(2);
+    expect(consultarDisponibilidadProveedor).toHaveBeenLastCalledWith(
+      10,
+      FECHA_ALTERNATIVA,
+      100,
+      expect.objectContaining({ signal: expect.anything() })
+    );
+  });
+
+  test('no permite enviar la solicitud si no hay horarios disponibles', async () => {
+    consultarDisponibilidadProveedor.mockResolvedValue({
+      ...DISPONIBILIDAD,
+      motivo: 'SIN_HORARIOS_LIBRES',
+      horas_disponibles: [],
+      horas_ocupadas: ['10:00'],
+    });
+
+    renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+
+    expect(
+      await screen.findByText(/Todas las horas de ese día están ocupadas/i)
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Dirección de atención/), {
+      target: { value: 'Calle 100 # 20-30' },
+    });
+    fireEvent.change(screen.getByLabelText(/Barrio o sector/), {
+      target: { value: 'Usaquén' },
+    });
+    confirmar();
+
+    expect(await screen.findByText('La hora es obligatoria')).toBeInTheDocument();
+    expect(crearSolicitud).not.toHaveBeenCalled();
+  });
+
+  test('vuelve a consultar la disponibilidad cuando cambia el servicio', async () => {
+    const SERVICIO_ALTERNATIVO = {
+      ...SERVICIO,
+      id: 101,
+      id_proveedor: 11,
+      duracion_minutos: 30,
+      nombre: 'Otro servicio',
+    };
+
+    consultarServicioPorId.mockImplementation((id) =>
+      Promise.resolve(Number(id) === 100 ? SERVICIO : SERVICIO_ALTERNATIVO)
+    );
+    consultarDisponibilidadProveedor.mockImplementation((idProveedor, fecha, idServicio) =>
+      Promise.resolve({
+        ...DISPONIBILIDAD,
+        id_proveedor: idProveedor,
+        id_servicio: idServicio,
+        horas_disponibles: Number(idServicio) === 101 ? ['08:00'] : ['10:00'],
+        horas_ocupadas: [],
+      })
+    );
+
+    const { rerender } = renderizar();
+    await esperarFormulario();
+    await seleccionarFecha();
+    fireEvent.click(await screen.findByLabelText('10:00'));
+    expect(screen.getByLabelText('10:00')).toBeChecked();
+
+    rerender(
+      <SolicitudServicio
+        idServicio={101}
+        idProveedor={11}
+        sesion={SESION_CLIENTE}
+        onVolverDetalle={jest.fn()}
+        onVolverExploracion={jest.fn()}
+      />
+    );
+
+    expect(await screen.findByLabelText('08:00')).toBeInTheDocument();
+    expect(screen.queryByLabelText('10:00')).not.toBeInTheDocument();
+    expect(consultarDisponibilidadProveedor).toHaveBeenLastCalledWith(
+      11,
+      FECHA,
+      101,
+      expect.objectContaining({ signal: expect.anything() })
+    );
   });
 });

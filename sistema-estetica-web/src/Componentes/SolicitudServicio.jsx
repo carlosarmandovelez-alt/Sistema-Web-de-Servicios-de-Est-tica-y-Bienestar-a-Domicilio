@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { consultarPerfilCliente } from '../Servicios/clienteService';
 import {
+  consultarDisponibilidadProveedor,
   consultarProveedorPorId,
   consultarServicioPorId,
 } from '../Servicios/exploracionService';
@@ -72,6 +73,30 @@ const mensajePareceDeHorario = (mensaje) =>
   /(horario|periodo no disponible|no está disponible en la fecha|disponibilidad del proveedor|media hora)/i.test(
     mensaje
   );
+
+/**
+ * HU-012: mensajes para los casos en los que el Proveedor no tiene horas
+ * disponibles. El motivo lo calcula el backend, que es la autoridad.
+ */
+const MENSAJES_SIN_DISPONIBILIDAD = {
+  SERVICIO_NO_DISPONIBLE: 'El servicio seleccionado ya no está disponible.',
+  PERIODO_NO_DISPONIBLE:
+    'El Proveedor no atiende en la fecha seleccionada por un periodo de excepción.',
+  SIN_DISPONIBILIDAD_DIA: 'El Proveedor no atiende ese día de la semana.',
+  SIN_HORARIOS_SUFICIENTES:
+    'La duración del servicio no cabe en el horario de atención de ese día.',
+  SIN_HORARIOS_LIBRES:
+    'Todas las horas de ese día están ocupadas por otras solicitudes.',
+};
+
+const MENSAJE_SIN_DISPONIBILIDAD_GENERAL =
+  'No hay horarios disponibles para este Proveedor en la fecha seleccionada. Intenta elegir otra fecha.';
+
+const obtenerMensajeSinDisponibilidad = (motivo) =>
+  MENSAJES_SIN_DISPONIBILIDAD[motivo] || MENSAJE_SIN_DISPONIBILIDAD_GENERAL;
+
+const identificadorHora = (hora) =>
+  `solicitud-hora-${String(hora).replace(/\D/g, '')}`;
 
 const AccesoRestringido = ({ sesion, onVolverDetalle, onVolverExploracion }) => {
   const motivo = sesion?.token
@@ -269,6 +294,21 @@ const FormularioSolicitud = ({
   const [solicitudCreada, setSolicitudCreada] = useState(null);
   const enviandoRef = useRef(false);
 
+  // HU-012: disponibilidad real del Proveedor para la fecha elegida.
+  const [disponibilidad, setDisponibilidad] = useState({
+    cargando: false,
+    datos: null,
+    error: null,
+  });
+  const [intentoDisponibilidad, setIntentoDisponibilidad] = useState(0);
+
+  // Último valor del formulario, para consultar la hora elegida dentro del
+  // efecto de disponibilidad sin volver a ejecutarlo en cada cambio de hora.
+  const formularioRef = useRef(formulario);
+  useEffect(() => {
+    formularioRef.current = formulario;
+  }, [formulario]);
+
   const fechaMinima = useMemo(() => obtenerFechaHoyISO(), []);
 
   // Carga el servicio real y, como apoyo opcional, la dirección principal del
@@ -411,6 +451,62 @@ const FormularioSolicitud = ({
   const duracionTexto = formatearDuracionDetallada(duracion);
   const direccionPrincipal = estado.perfil?.direccionPrincipal || null;
 
+  // HU-012: consulta las horas reales del Proveedor cuando cambian el
+  // servicio o la fecha. Si la hora elegida deja de estar disponible, se
+  // limpia para que no se envíe un valor obsoleto.
+  useEffect(() => {
+    if (!servicio || !esFechaValida(formulario.fecha)) {
+      setDisponibilidad({ cargando: false, datos: null, error: null });
+      return undefined;
+    }
+
+    let activo = true;
+    const controlador = new AbortController();
+    const horaActual = formularioRef.current.hora;
+
+    setDisponibilidad((previo) => ({ ...previo, cargando: true, error: null }));
+
+    const cargar = async () => {
+      try {
+        const datos = await consultarDisponibilidadProveedor(
+          servicio.id_proveedor,
+          formulario.fecha,
+          servicio.id,
+          { signal: controlador.signal }
+        );
+
+        if (!activo) return;
+
+        setDisponibilidad({ cargando: false, datos, error: null });
+
+        const disponibles = Array.isArray(datos?.horas_disponibles)
+          ? datos.horas_disponibles
+          : [];
+
+        if (horaActual && !disponibles.includes(horaActual)) {
+          setFormulario((previo) => ({ ...previo, hora: '' }));
+          setErrores((previos) =>
+            previos.hora ? { ...previos, hora: undefined } : previos
+          );
+        }
+      } catch (error) {
+        if (!activo || error?.name === 'AbortError') return;
+        setDisponibilidad({ cargando: false, datos: null, error });
+        setFormulario((previo) => (previo.hora ? { ...previo, hora: '' } : previo));
+        setErrores((previos) =>
+          previos.hora ? { ...previos, hora: undefined } : previos
+        );
+      }
+    };
+
+    cargar();
+
+    return () => {
+      activo = false;
+      controlador.abort();
+    };
+  }, [servicio, formulario.fecha, intentoDisponibilidad]);
+
   const horaFin = useMemo(() => {
     if (!esFechaValida(formulario.fecha) || !esHoraValida(formulario.hora)) return null;
     return describirHoraFin(formulario.fecha, formulario.hora, duracion);
@@ -423,14 +519,44 @@ const FormularioSolicitud = ({
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFormulario((previo) => ({ ...previo, [name]: value }));
+    setFormulario((previo) => ({
+      ...previo,
+      [name]: value,
+      // Al cambiar la fecha, la hora anterior deja de ser válida.
+      ...(name === 'fecha' ? { hora: '' } : {}),
+    }));
     if (errores[name]) {
       setErrores((previo) => ({ ...previo, [name]: undefined }));
+    }
+    if (name === 'fecha' && errores.hora) {
+      setErrores((previo) => ({ ...previo, hora: undefined }));
     }
     if (name === 'fecha' || name === 'hora') {
       setErrorHorario(null);
     }
   };
+
+  const seleccionarHora = (hora) => {
+    setFormulario((previo) => ({ ...previo, hora }));
+    if (errores.hora) {
+      setErrores((previo) => ({ ...previo, hora: undefined }));
+    }
+    setErrorHorario(null);
+  };
+
+  const reintentarDisponibilidad = () => {
+    setIntentoDisponibilidad((valor) => valor + 1);
+  };
+
+  const horasDisponibles = Array.isArray(disponibilidad.datos?.horas_disponibles)
+    ? disponibilidad.datos.horas_disponibles
+    : [];
+  const horasOcupadas = Array.isArray(disponibilidad.datos?.horas_ocupadas)
+    ? disponibilidad.datos.horas_ocupadas
+    : [];
+  const mensajeSinHorarios = disponibilidad.datos
+    ? obtenerMensajeSinDisponibilidad(disponibilidad.datos.motivo)
+    : MENSAJE_SIN_DISPONIBILIDAD_GENERAL;
 
   const usarDireccionPrincipal = () => {
     if (!direccionPrincipal) return;
@@ -949,8 +1075,8 @@ const FormularioSolicitud = ({
           <div className="card-body">
             <h3 className="h5 fw-semibold text-dark mb-1">Fecha y hora de la atención</h3>
             <p className="small text-muted mb-3">
-              Selecciona la fecha y la hora de inicio en tu hora local. El sistema comprobará que
-              el Proveedor tenga disponibilidad registrada para ese momento.
+              Selecciona la fecha y la hora de inicio en tu hora local. Las horas que verás
+              corresponden a la disponibilidad real del Proveedor para ese día.
             </p>
 
             <div className="row g-3">
@@ -977,34 +1103,134 @@ const FormularioSolicitud = ({
                   </div>
                 )}
               </div>
+            </div>
 
-              <div className="col-12 col-sm-6">
-                <label htmlFor="solicitud-hora" className="form-label small fw-semibold">
+            <div className="mt-3">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <span className="form-label small fw-semibold mb-0">
                   Hora de inicio <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="time"
-                  id="solicitud-hora"
-                  name="hora"
-                  className={`form-control ${errores.hora ? 'is-invalid' : ''}`}
-                  value={formulario.hora}
-                  onChange={handleChange}
-                  step="1800"
-                  required
-                  disabled={enviando}
-                  aria-invalid={!!errores.hora}
-                  aria-describedby={errores.hora ? 'error-solicitud-hora' : 'ayuda-solicitud-hora'}
-                />
-                {errores.hora ? (
-                  <div id="error-solicitud-hora" className="invalid-feedback d-block">
-                    {errores.hora}
-                  </div>
-                ) : (
-                  <div id="ayuda-solicitud-hora" className="form-text">
-                    Debe quedar en el futuro y en punto o a la media hora (:00 o :30).
-                  </div>
+                </span>
+                {esFechaValida(formulario.fecha) && (
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm p-0"
+                    onClick={reintentarDisponibilidad}
+                    disabled={enviando || disponibilidad.cargando}
+                  >
+                    Actualizar horarios
+                  </button>
                 )}
               </div>
+
+              {!esFechaValida(formulario.fecha) && (
+                <p className="small text-muted mb-0" id="ayuda-solicitud-hora">
+                  Selecciona una fecha para consultar los horarios disponibles del Proveedor.
+                </p>
+              )}
+
+              {esFechaValida(formulario.fecha) && disponibilidad.cargando && (
+                <div
+                  className="d-flex align-items-center gap-2 text-muted"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="spinner-border spinner-border-sm text-primary" aria-hidden="true" />
+                  <span>Consultando la disponibilidad del Proveedor...</span>
+                </div>
+              )}
+
+              {esFechaValida(formulario.fecha) &&
+                !disponibilidad.cargando &&
+                disponibilidad.error && (
+                  <div className="alert alert-warning mb-0" role="alert">
+                    <p className="mb-2">
+                      No fue posible consultar la disponibilidad del Proveedor.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={reintentarDisponibilidad}
+                      disabled={enviando}
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                )}
+
+              {esFechaValida(formulario.fecha) &&
+                !disponibilidad.cargando &&
+                !disponibilidad.error &&
+                disponibilidad.datos && (
+                  <>
+                    {horasDisponibles.length > 0 ? (
+                      <div
+                        id="solicitud-hora"
+                        role="radiogroup"
+                        aria-label="Horarios disponibles"
+                        aria-invalid={!!errores.hora}
+                        aria-describedby={
+                          errores.hora ? 'error-solicitud-hora' : 'ayuda-solicitud-hora'
+                        }
+                      >
+                        <div className="d-flex flex-wrap gap-2">
+                          {horasDisponibles.map((hora) => {
+                            const id = identificadorHora(hora);
+                            return (
+                              <div key={hora}>
+                                <input
+                                  type="radio"
+                                  className="btn-check"
+                                  name="hora"
+                                  id={id}
+                                  value={hora}
+                                  checked={formulario.hora === hora}
+                                  onChange={() => seleccionarHora(hora)}
+                                  disabled={enviando}
+                                />
+                                <label className="btn btn-outline-primary btn-sm" htmlFor={id}>
+                                  {hora}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div id="ayuda-solicitud-hora" className="form-text">
+                          Horas de inicio en punto o a la media hora, según la disponibilidad del
+                          Proveedor.
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="alert alert-info mb-0" role="status">
+                        {mensajeSinHorarios}
+                      </div>
+                    )}
+
+                    {horasOcupadas.length > 0 && (
+                      <div className="mt-3">
+                        <p className="small text-muted mb-2">
+                          Horas no disponibles (otras solicitudes):
+                        </p>
+                        <div className="d-flex flex-wrap gap-2">
+                          {horasOcupadas.map((hora) => (
+                            <span
+                              key={hora}
+                              className="btn btn-outline-secondary btn-sm disabled"
+                              aria-disabled="true"
+                            >
+                              {hora}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+              {errores.hora && (
+                <div id="error-solicitud-hora" className="invalid-feedback d-block mt-2">
+                  {errores.hora}
+                </div>
+              )}
             </div>
 
             <div className="border rounded bg-light p-3 mt-3" role="status" aria-live="polite">

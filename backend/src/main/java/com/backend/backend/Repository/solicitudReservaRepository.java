@@ -3,7 +3,9 @@ package com.backend.backend.Repository;
 import com.backend.backend.Model.clienteModel;
 import com.backend.backend.Model.proveedorModel;
 import com.backend.backend.Model.solicitud_reservaModel;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -31,6 +33,31 @@ public interface solicitudReservaRepository extends JpaRepository<solicitud_rese
     Optional<solicitud_reservaModel> buscarPorIdYProveedor(
         @Param("idSolicitud") Integer idSolicitud, 
         @Param("proveedor") proveedorModel proveedor
+    );
+
+    /**
+     * HU-015: misma búsqueda que {@link #buscarPorIdYProveedor} pero con
+     * bloqueo pesimista de la fila. Serializa las respuestas (aceptar,
+     * rechazar, proponer) sobre una misma solicitud para que no se pisen
+     * entre sí. Requiere una transacción activa.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM solicitud_reservaModel s WHERE s.id_solicitud = :idSolicitud AND s.proveedor = :proveedor")
+    Optional<solicitud_reservaModel> buscarPorIdYProveedorConBloqueo(
+        @Param("idSolicitud") Integer idSolicitud,
+        @Param("proveedor") proveedorModel proveedor
+    );
+
+    /**
+     * HU-016: misma búsqueda que {@link #buscarPorIdYCliente} pero con
+     * bloqueo pesimista. Serializa aceptar y rechazar una misma
+     * contrapropuesta para que no se pisen entre sí. Requiere transacción.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM solicitud_reservaModel s WHERE s.id_solicitud = :idSolicitud AND s.cliente = :cliente")
+    Optional<solicitud_reservaModel> buscarPorIdYClienteConBloqueo(
+        @Param("idSolicitud") Integer idSolicitud,
+        @Param("cliente") clienteModel cliente
     );
 
     // HU-015: Buscar reservas aceptadas por proveedor para validar solapamiento

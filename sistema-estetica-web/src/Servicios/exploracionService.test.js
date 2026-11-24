@@ -1,4 +1,5 @@
 import {
+  consultarDisponibilidadProveedor,
   consultarProveedorPorId,
   consultarServicioPorId,
   obtenerProveedoresDisponibles,
@@ -68,5 +69,55 @@ describe('exploracionService: clasificación de errores de HU-010', () => {
     await expect(consultarProveedorPorId(1)).rejects.toThrow(
       'No fue posible conectar con el servidor. Verifica tu conexión a internet.'
     );
+  });
+});
+
+describe('exploracionService: disponibilidad del Proveedor para HU-012', () => {
+  const fetchOriginal = global.fetch;
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    jest.restoreAllMocks();
+  });
+
+  test('consulta la disponibilidad con proveedor, fecha y servicio en la URL', async () => {
+    const payload = {
+      id_proveedor: 10,
+      id_servicio: 100,
+      duracion_minutos: 90,
+      fecha: '2026-12-02',
+      dia_semana: 'miercoles',
+      atiende: true,
+      motivo: null,
+      horas_disponibles: ['10:00', '10:30'],
+      horas_ocupadas: ['09:00'],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    });
+
+    await expect(
+      consultarDisponibilidadProveedor(10, '2026-12-02', 100)
+    ).resolves.toEqual(payload);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/exploracion/proveedores/10/disponibilidad?fecha=2026-12-02&idServicio=100',
+      undefined
+    );
+  });
+
+  test('propaga el 404 del backend cuando el proveedor no existe', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuestaError(404, { error: 'El proveedor no fue encontrado' })
+    );
+
+    await expect(
+      consultarDisponibilidadProveedor(999, '2026-12-02', 1)
+    ).rejects.toMatchObject({
+      status: 404,
+      message: 'El proveedor no fue encontrado',
+    });
   });
 });

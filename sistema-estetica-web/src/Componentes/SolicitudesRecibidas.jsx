@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  aceptarSolicitud,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
+  proponerHorario,
+  rechazarSolicitud,
 } from '../Servicios/solicitudService';
 import {
   AlertaError,
@@ -13,9 +16,16 @@ import {
   obtenerMensajeError,
 } from './ExploracionComun';
 import {
+  construirFechaHoraSolicitada,
+  esFechaHoraFutura,
+  esFechaValida,
+  esHoraEnFranjaMediaHora,
+  esHoraValida,
   formatearHora,
   formatearLocalDateTime,
   mapearEstadoSolicitud,
+  obtenerFechaHoyISO,
+  parsearLocalDateTime,
 } from './solicitudUtilidades';
 import {
   obtenerClaseEstadoSolicitud,
@@ -44,6 +54,38 @@ const obtenerEtiquetaCliente = (idCliente) => {
     return CLIENTE_NO_IDENTIFICADO;
   }
   return `Cliente #${idCliente}`;
+};
+
+/**
+ * HU-015: la respuesta del Proveedor solo está disponible para solicitudes
+ * Pendientes. El backend vuelve a validar el estado; esto es solo la
+ * presentación.
+ */
+const estaPendiente = (solicitud) =>
+  typeof solicitud?.estado === 'string' &&
+  solicitud.estado.trim().toLowerCase() === 'pendiente';
+
+const mensajeDeErrorRespuesta = (error, fallback) => {
+  if (!error) return fallback;
+
+  if (error.status === 404) {
+    return 'La solicitud no existe o no está dirigida a tu cuenta. Actualiza el listado.';
+  }
+
+  if (error.status === 401 || error.status === 403 || error.esErrorAutenticacion) {
+    return (
+      error.message ||
+      'Tu sesión ha expirado o no tienes permisos para responder esta solicitud.'
+    );
+  }
+
+  return error.message || fallback;
+};
+
+const mismaFechaHora = (primera, segunda) => {
+  const inicio = parsearLocalDateTime(primera);
+  const inicioSegundo = parsearLocalDateTime(segunda);
+  return Boolean(inicio && inicioSegundo && inicio.getTime() === inicioSegundo.getTime());
 };
 
 const BadgeEstado = ({ estado, className = '' }) => (
@@ -86,6 +128,17 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [errorDetalle, setErrorDetalle] = useState(null);
   const [intentoDetalle, setIntentoDetalle] = useState(0);
+
+  // HU-015: estado de la respuesta del Proveedor (aceptar, rechazar, proponer).
+  const [respuesta, setRespuesta] = useState({ tipo: null });
+  const [motivoRechazo, setMotivoRechazo] = useState('');
+  const [errorMotivo, setErrorMotivo] = useState(null);
+  const [propuestaFecha, setPropuestaFecha] = useState('');
+  const [propuestaHora, setPropuestaHora] = useState('');
+  const [errorPropuesta, setErrorPropuesta] = useState(null);
+  const [procesandoAccion, setProcesandoAccion] = useState(false);
+  const [mensajeAccion, setMensajeAccion] = useState(null);
+  const fechaMinimaPropuesta = useMemo(() => obtenerFechaHoyISO(), []);
 
   const irAlInicio = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
@@ -175,11 +228,23 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     [solicitudes]
   );
 
+  const reiniciarRespuesta = () => {
+    setRespuesta({ tipo: null });
+    setMotivoRechazo('');
+    setErrorMotivo(null);
+    setPropuestaFecha('');
+    setPropuestaHora('');
+    setErrorPropuesta(null);
+    setMensajeAccion(null);
+    setProcesandoAccion(false);
+  };
+
   const verDetalle = (idSolicitud) => {
     setCargandoDetalle(true);
     setVista({ tipo: 'detalle', idSolicitud });
     setDetalle(null);
     setErrorDetalle(null);
+    reiniciarRespuesta();
     irAlInicio();
   };
 
@@ -188,6 +253,7 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     setDetalle(null);
     setErrorDetalle(null);
     setCargandoDetalle(false);
+    reiniciarRespuesta();
     irAlInicio();
   };
 
@@ -201,6 +267,129 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     setCargandoDetalle(true);
     setErrorDetalle(null);
     setIntentoDetalle((valor) => valor + 1);
+  };
+
+  // ─── HU-015: acciones del Proveedor ────────────────────────────────────────
+
+  const cerrarFormularioRespuesta = () => {
+    if (procesandoAccion) return;
+    setRespuesta({ tipo: null });
+    setErrorMotivo(null);
+    setErrorPropuesta(null);
+  };
+
+  const aplicarSolicitudActualizada = (actualizada) => {
+    setDetalle(actualizada);
+    setSolicitudes((previas) =>
+      previas.map((solicitud) =>
+        Number(solicitud.id_solicitud) === Number(actualizada.id_solicitud)
+          ? { ...solicitud, ...actualizada }
+          : solicitud
+      )
+    );
+  };
+
+  const ejecutarRespuesta = async (operacion, mensajeExito) => {
+    if (procesandoAccion) return;
+
+    setProcesandoAccion(true);
+    setMensajeAccion(null);
+
+    try {
+      const actualizada = await operacion();
+
+      if (
+        !actualizada ||
+        actualizada.id_solicitud === null ||
+        actualizada.id_solicitud === undefined
+      ) {
+        throw new Error('El servidor no confirmó la actualización de la solicitud.');
+      }
+
+      aplicarSolicitudActualizada(actualizada);
+      setRespuesta({ tipo: null });
+      setMotivoRechazo('');
+      setPropuestaFecha('');
+      setPropuestaHora('');
+      setErrorMotivo(null);
+      setErrorPropuesta(null);
+      setMensajeAccion({ tipo: 'exito', texto: mensajeExito });
+    } catch (error) {
+      setMensajeAccion({
+        tipo: 'error',
+        texto: mensajeDeErrorRespuesta(
+          error,
+          'No fue posible completar la operación sobre la solicitud.'
+        ),
+      });
+    } finally {
+      setProcesandoAccion(false);
+    }
+  };
+
+  const confirmarAceptacion = () => {
+    if (!detalle || procesandoAccion) return;
+    ejecutarRespuesta(
+      () => aceptarSolicitud(sesion.token, detalle.id_solicitud),
+      'Solicitud aceptada. La reserva quedó confirmada en tu agenda.'
+    );
+  };
+
+  const enviarRechazo = (event) => {
+    event.preventDefault();
+    if (!detalle || procesandoAccion) return;
+
+    const motivo = motivoRechazo.trim();
+    if (!motivo) {
+      setErrorMotivo('El motivo del rechazo es obligatorio.');
+      return;
+    }
+
+    setErrorMotivo(null);
+    ejecutarRespuesta(
+      () => rechazarSolicitud(sesion.token, detalle.id_solicitud, motivo),
+      'Solicitud rechazada. El motivo quedó registrado.'
+    );
+  };
+
+  const enviarPropuesta = (event) => {
+    event.preventDefault();
+    if (!detalle || procesandoAccion) return;
+
+    if (!esFechaValida(propuestaFecha)) {
+      setErrorPropuesta('Selecciona una fecha válida.');
+      return;
+    }
+    if (!esHoraValida(propuestaHora)) {
+      setErrorPropuesta('Selecciona una hora válida.');
+      return;
+    }
+    if (!esHoraEnFranjaMediaHora(propuestaHora)) {
+      setErrorPropuesta('La hora debe ser en punto o a la media hora (:00 o :30).');
+      return;
+    }
+    if (!esFechaHoraFutura(propuestaFecha, propuestaHora)) {
+      setErrorPropuesta('La fecha y hora propuestas deben ser futuras.');
+      return;
+    }
+
+    const fechaHoraPropuesta = construirFechaHoraSolicitada(propuestaFecha, propuestaHora);
+    if (!fechaHoraPropuesta) {
+      setErrorPropuesta('La fecha u hora propuesta no es válida.');
+      return;
+    }
+    if (mismaFechaHora(fechaHoraPropuesta, detalle.fecha_hora_solicitada)) {
+      setErrorPropuesta(
+        'La nueva fecha y hora debe ser diferente a la solicitada por el Cliente.'
+      );
+      return;
+    }
+
+    setErrorPropuesta(null);
+    ejecutarRespuesta(
+      () => proponerHorario(sesion.token, detalle.id_solicitud, fechaHoraPropuesta),
+      'Contrapropuesta enviada. La solicitud quedó en estado Sugerida.'
+    );
   };
 
   // ─── Detalle de una solicitud recibida ─────────────────────────────────────
@@ -315,6 +504,18 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
           <BadgeEstado estado={detalle.estado} className="fs-6" />
         </div>
 
+        {mensajeAccion && (
+          <div
+            className={`alert ${
+              mensajeAccion.tipo === 'exito' ? 'alert-success' : 'alert-danger'
+            }`}
+            role={mensajeAccion.tipo === 'exito' ? 'status' : 'alert'}
+            aria-live="polite"
+          >
+            {mensajeAccion.texto}
+          </div>
+        )}
+
         {motivo &&
           (motivo.motivo ? (
             <div
@@ -337,6 +538,260 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
               .
             </p>
           ))}
+
+        {estaPendiente(detalle) && (
+          <div
+            className="card shadow-sm border-0 mb-4"
+            aria-labelledby="responder-solicitud-titulo"
+          >
+            <div className="card-body">
+              <h3
+                id="responder-solicitud-titulo"
+                className="h5 fw-semibold text-dark mb-1"
+              >
+                Responder a la solicitud
+              </h3>
+              <p className="small text-muted mb-3">
+                Puedes aceptar la reserva, rechazarla con un motivo o proponer otro horario.
+                El servidor validará tu disponibilidad y que no exista otra reserva aceptada en
+                el mismo periodo.
+              </p>
+
+              {respuesta.tipo === null && (
+                <div className="d-flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={() => {
+                      setMensajeAccion(null);
+                      setRespuesta({ tipo: 'aceptar' });
+                    }}
+                  >
+                    Aceptar solicitud
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger"
+                    onClick={() => {
+                      setMensajeAccion(null);
+                      setErrorMotivo(null);
+                      setRespuesta({ tipo: 'rechazar' });
+                    }}
+                  >
+                    Rechazar solicitud
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={() => {
+                      setMensajeAccion(null);
+                      setErrorPropuesta(null);
+                      setPropuestaFecha('');
+                      setPropuestaHora('');
+                      setRespuesta({ tipo: 'proponer' });
+                    }}
+                  >
+                    Proponer otro horario
+                  </button>
+                </div>
+              )}
+
+              {respuesta.tipo === 'aceptar' && (
+                <div
+                  className="border rounded bg-light p-3"
+                  role="group"
+                  aria-label="Confirmar aceptación de la solicitud"
+                >
+                  <p className="fw-semibold mb-1">
+                    ¿Confirmas la aceptación de esta solicitud?
+                  </p>
+                  <p className="small text-muted mb-3">
+                    Se comprobará nuevamente que el horario esté dentro de tu disponibilidad y
+                    que no se cruce con otra reserva aceptada.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={confirmarAceptacion}
+                      disabled={procesandoAccion}
+                    >
+                      {procesandoAccion ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Aceptando...
+                        </>
+                      ) : (
+                        'Confirmar aceptación'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cerrarFormularioRespuesta}
+                      disabled={procesandoAccion}
+                    >
+                      Volver
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {respuesta.tipo === 'rechazar' && (
+                <form onSubmit={enviarRechazo} noValidate>
+                  <label
+                    htmlFor="motivo-rechazo"
+                    className="form-label small fw-semibold"
+                  >
+                    Motivo del rechazo <span className="text-danger">*</span>
+                  </label>
+                  <textarea
+                    id="motivo-rechazo"
+                    name="motivo_rechazo"
+                    rows="3"
+                    maxLength={255}
+                    className={`form-control ${errorMotivo ? 'is-invalid' : ''}`}
+                    value={motivoRechazo}
+                    onChange={(event) => {
+                      setMotivoRechazo(event.target.value);
+                      if (errorMotivo) setErrorMotivo(null);
+                    }}
+                    disabled={procesandoAccion}
+                    aria-invalid={Boolean(errorMotivo)}
+                    aria-describedby={errorMotivo ? 'error-motivo-rechazo' : undefined}
+                    placeholder="Explica al Cliente por qué no puedes atender esta solicitud"
+                    required
+                  />
+                  {errorMotivo && (
+                    <div id="error-motivo-rechazo" className="invalid-feedback d-block">
+                      {errorMotivo}
+                    </div>
+                  )}
+                  <div className="d-flex flex-wrap gap-2 mt-3">
+                    <button
+                      type="submit"
+                      className="btn btn-danger btn-sm"
+                      disabled={procesandoAccion}
+                    >
+                      {procesandoAccion ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Rechazando...
+                        </>
+                      ) : (
+                        'Confirmar rechazo'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cerrarFormularioRespuesta}
+                      disabled={procesandoAccion}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {respuesta.tipo === 'proponer' && (
+                <form onSubmit={enviarPropuesta} noValidate>
+                  <div className="row g-3">
+                    <div className="col-12 col-sm-6">
+                      <label
+                        htmlFor="propuesta-fecha"
+                        className="form-label small fw-semibold"
+                      >
+                        Nueva fecha <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        id="propuesta-fecha"
+                        name="propuesta_fecha"
+                        className={`form-control ${errorPropuesta ? 'is-invalid' : ''}`}
+                        value={propuestaFecha}
+                        min={fechaMinimaPropuesta}
+                        onChange={(event) => {
+                          setPropuestaFecha(event.target.value);
+                          if (errorPropuesta) setErrorPropuesta(null);
+                        }}
+                        disabled={procesandoAccion}
+                        aria-invalid={Boolean(errorPropuesta)}
+                        required
+                      />
+                    </div>
+                    <div className="col-12 col-sm-6">
+                      <label
+                        htmlFor="propuesta-hora"
+                        className="form-label small fw-semibold"
+                      >
+                        Nueva hora de inicio <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        id="propuesta-hora"
+                        name="propuesta_hora"
+                        className={`form-control ${errorPropuesta ? 'is-invalid' : ''}`}
+                        value={propuestaHora}
+                        step="1800"
+                        onChange={(event) => {
+                          setPropuestaHora(event.target.value);
+                          if (errorPropuesta) setErrorPropuesta(null);
+                        }}
+                        disabled={procesandoAccion}
+                        aria-invalid={Boolean(errorPropuesta)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  {errorPropuesta && (
+                    <div className="invalid-feedback d-block">{errorPropuesta}</div>
+                  )}
+                  <p className="form-text">
+                    El horario debe estar dentro de tu disponibilidad, en punto o a la media
+                    hora, y ser distinto al solicitado por el Cliente.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={procesandoAccion}
+                    >
+                      {procesandoAccion ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Enviando...
+                        </>
+                      ) : (
+                        'Enviar contrapropuesta'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cerrarFormularioRespuesta}
+                      disabled={procesandoAccion}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="card shadow-sm border-0 mb-4">
           <div className="card-body">
@@ -366,6 +821,17 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
               <dd className="col-12 col-sm-8 mb-0 text-dark">
                 {atencion.finTexto || 'No disponible'}
               </dd>
+
+              {detalle.fecha_hora_propuesta && (
+                <>
+                  <dt className="col-12 col-sm-4 text-muted fw-normal">
+                    Nueva fecha propuesta
+                  </dt>
+                  <dd className="col-12 col-sm-8 mb-0 text-dark">
+                    {formatearLocalDateTime(detalle.fecha_hora_propuesta) || 'No informada'}
+                  </dd>
+                </>
+              )}
             </dl>
           </div>
         </div>
@@ -596,6 +1062,14 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
                           {formatearLocalDateTime(solicitud.fecha_creacion) || 'No informada'}
                         </dd>
                       </dl>
+
+                      {solicitud.fecha_hora_propuesta && (
+                        <p className="small text-info-emphasis mt-2 mb-0">
+                          Nueva fecha propuesta:{' '}
+                          {formatearLocalDateTime(solicitud.fecha_hora_propuesta) ||
+                            'No informada'}
+                        </p>
+                      )}
 
                       <div className="pt-3 mt-3 border-top">
                         <button

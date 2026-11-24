@@ -164,3 +164,37 @@ export const consultarServicioPorId = async (idServicio, { signal } = {}) => {
     signal
   );
 };
+
+/**
+ * HU-012: consulta las horas de inicio disponibles del Proveedor para un
+ * servicio y una fecha concretos. El backend calcula la disponibilidad
+ * aplicando las franjas habituales, los periodos de excepción, la duración
+ * del servicio y las solicitudes que ya bloquean el horario.
+ *
+ * GET /api/exploracion/proveedores/{idProveedor}/disponibilidad?fecha=AAAA-MM-DD&idServicio=N
+ *
+ * @param {number|string} idProveedor
+ * @param {string} fecha "AAAA-MM-DD"
+ * @param {number|string} idServicio
+ * @param {{ signal?: AbortSignal }} opciones
+ * @returns {Promise<{
+ *   id_proveedor:number, id_servicio:number, duracion_minutos:number,
+ *   fecha:string, dia_semana:string|null, atiende:boolean,
+ *   motivo:string|null, horas_disponibles:string[], horas_ocupadas:string[]
+ * }>}
+ */
+export const consultarDisponibilidadProveedor = async (
+  idProveedor,
+  fecha,
+  idServicio,
+  { signal } = {}
+) => {
+  const parametros = `fecha=${encodeURIComponent(fecha)}&idServicio=${encodeURIComponent(
+    idServicio
+  )}`;
+  return await peticionPublica(
+    `${API_URL}/proveedores/${encodeURIComponent(idProveedor)}/disponibilidad?${parametros}`,
+    'Error al consultar la disponibilidad del proveedor',
+    signal
+  );
+};

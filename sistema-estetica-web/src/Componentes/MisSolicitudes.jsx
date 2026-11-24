@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  aceptarContrapropuesta,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
+  rechazarContrapropuesta,
 } from '../Servicios/solicitudService';
 import { consultarProveedorPorId } from '../Servicios/exploracionService';
 import {
@@ -14,9 +16,12 @@ import {
   obtenerMensajeError,
 } from './ExploracionComun';
 import {
+  formatearFecha,
   formatearHora,
   formatearLocalDateTime,
   mapearEstadoSolicitud,
+  parsearLocalDateTime,
+  sumarMinutos,
 } from './solicitudUtilidades';
 import {
   obtenerClaseEstadoSolicitud,
@@ -45,6 +50,44 @@ const formatearNombreProveedor = (proveedor) =>
     .map((parte) => String(parte).trim())
     .filter(Boolean)
     .join(' ');
+
+/**
+ * HU-016: la respuesta a la contrapropuesta solo está disponible cuando la
+ * solicitud está Sugerida. El backend vuelve a validar el estado.
+ */
+const estaSugerida = (solicitud) =>
+  typeof solicitud?.estado === 'string' &&
+  solicitud.estado.trim().toLowerCase() === 'sugerida';
+
+const mensajeErrorContrapropuesta = (error, fallback) => {
+  if (!error) return fallback;
+
+  if (error.status === 404) {
+    return 'La solicitud no existe o no te pertenece.';
+  }
+
+  if (error.status === 401 || error.status === 403 || error.esErrorAutenticacion) {
+    return (
+      error.message ||
+      'Tu sesión ha expirado o no tienes permisos para responder la contrapropuesta.'
+    );
+  }
+
+  return error.message || fallback;
+};
+
+const describirHorarioPropuesto = (fechaHora, duracionMinutos) => {
+  const inicio = parsearLocalDateTime(fechaHora);
+  if (!inicio) return '';
+
+  const duracion = Number(duracionMinutos);
+  const fin =
+    Number.isFinite(duracion) && duracion > 0 ? sumarMinutos(inicio, duracion) : null;
+
+  return fin
+    ? `${formatearHora(inicio)} – ${formatearHora(fin)} del ${formatearFecha(inicio)}`
+    : formatearHora(inicio);
+};
 
 const BadgeEstado = ({ estado, className = '' }) => (
   <span
@@ -88,6 +131,11 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [errorDetalle, setErrorDetalle] = useState(null);
   const [intentoDetalle, setIntentoDetalle] = useState(0);
+
+  // HU-016: respuesta del Cliente a la contrapropuesta del Proveedor.
+  const [respuesta, setRespuesta] = useState({ tipo: null });
+  const [procesandoRespuesta, setProcesandoRespuesta] = useState(false);
+  const [mensajeRespuesta, setMensajeRespuesta] = useState(null);
 
   const irAlInicio = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
@@ -232,12 +280,19 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
     [solicitudes]
   );
 
+  const reiniciarRespuesta = () => {
+    setRespuesta({ tipo: null });
+    setProcesandoRespuesta(false);
+    setMensajeRespuesta(null);
+  };
+
   const verDetalle = (idSolicitud) => {
     setCargandoDetalle(true);
     setVista({ tipo: 'detalle', idSolicitud });
     setDetalle(null);
     setNombreProveedorDetalle(null);
     setErrorDetalle(null);
+    reiniciarRespuesta();
     irAlInicio();
   };
 
@@ -247,6 +302,7 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
     setNombreProveedorDetalle(null);
     setErrorDetalle(null);
     setCargandoDetalle(false);
+    reiniciarRespuesta();
     irAlInicio();
   };
 
@@ -260,6 +316,73 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
     setCargandoDetalle(true);
     setErrorDetalle(null);
     setIntentoDetalle((valor) => valor + 1);
+  };
+
+  // ─── HU-016: respuesta del Cliente a la contrapropuesta ────────────────────
+
+  const cerrarConfirmacion = () => {
+    if (procesandoRespuesta) return;
+    setRespuesta({ tipo: null });
+  };
+
+  const aplicarSolicitudActualizada = (actualizada) => {
+    setDetalle(actualizada);
+    setSolicitudes((previas) =>
+      previas.map((solicitud) =>
+        Number(solicitud.id_solicitud) === Number(actualizada.id_solicitud)
+          ? { ...solicitud, ...actualizada }
+          : solicitud
+      )
+    );
+  };
+
+  const ejecutarRespuesta = async (operacion, mensajeExito) => {
+    if (procesandoRespuesta) return;
+
+    setProcesandoRespuesta(true);
+    setMensajeRespuesta(null);
+
+    try {
+      const actualizada = await operacion();
+
+      if (
+        !actualizada ||
+        actualizada.id_solicitud === null ||
+        actualizada.id_solicitud === undefined
+      ) {
+        throw new Error('El servidor no confirmó la actualización de la solicitud.');
+      }
+
+      aplicarSolicitudActualizada(actualizada);
+      setRespuesta({ tipo: null });
+      setMensajeRespuesta({ tipo: 'exito', texto: mensajeExito });
+    } catch (error) {
+      setMensajeRespuesta({
+        tipo: 'error',
+        texto: mensajeErrorContrapropuesta(
+          error,
+          'No fue posible responder la contrapropuesta.'
+        ),
+      });
+    } finally {
+      setProcesandoRespuesta(false);
+    }
+  };
+
+  const confirmarAceptacion = () => {
+    if (!detalle || procesandoRespuesta) return;
+    ejecutarRespuesta(
+      () => aceptarContrapropuesta(sesion.token, detalle.id_solicitud),
+      'Horario confirmado. La solicitud quedó aceptada.'
+    );
+  };
+
+  const confirmarRechazo = () => {
+    if (!detalle || procesandoRespuesta) return;
+    ejecutarRespuesta(
+      () => rechazarContrapropuesta(sesion.token, detalle.id_solicitud),
+      'Contrapropuesta rechazada. La solicitud quedó cancelada.'
+    );
   };
 
   // ─── Detalle de la solicitud ───────────────────────────────────────────────
@@ -358,6 +481,13 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
     const motivo = obtenerMotivoSolicitud(detalle);
     const nombreProveedor =
       nombreProveedorDetalle || NOMBRE_PROVEEDOR_FALLBACK;
+    const sugerida = estaSugerida(detalle);
+    const horarioPropuesto = detalle.fecha_hora_propuesta
+      ? describirHorarioPropuesto(
+          detalle.fecha_hora_propuesta,
+          detalle.duracion_snapshot_minutos
+        )
+      : '';
 
     return (
       <section aria-labelledby="detalle-solicitud-titulo">
@@ -374,6 +504,196 @@ const PanelMisSolicitudes = ({ sesion, onExplorarServicios, onCerrarSesion }) =>
           </div>
           <BadgeEstado estado={detalle.estado} className="fs-6" />
         </div>
+
+        {mensajeRespuesta && (
+          <div
+            className={`alert ${
+              mensajeRespuesta.tipo === 'exito' ? 'alert-success' : 'alert-danger'
+            }`}
+            role={mensajeRespuesta.tipo === 'exito' ? 'status' : 'alert'}
+            aria-live="polite"
+          >
+            {mensajeRespuesta.texto}
+          </div>
+        )}
+
+        {detalle.fecha_hora_propuesta && (
+          <div
+            className="card shadow-sm border-0 mb-4"
+            aria-labelledby="contrapropuesta-titulo"
+          >
+            <div className="card-body">
+              <h3
+                id="contrapropuesta-titulo"
+                className="h5 fw-semibold text-dark mb-1"
+              >
+                {sugerida
+                  ? 'El Proveedor propuso un nuevo horario'
+                  : detalle.estado === 'aceptada'
+                    ? 'Horario confirmado de la contrapropuesta'
+                    : 'Contrapropuesta del Proveedor'}
+              </h3>
+              <p className="small text-muted mb-3">
+                {sugerida
+                  ? 'Revisa el horario propuesto y decide si lo aceptas. Al aceptarlo, el servidor volverá a comprobar la disponibilidad.'
+                  : detalle.estado === 'aceptada'
+                    ? 'Confirmaste el horario que propuso el Proveedor.'
+                    : 'La solicitud conserva el horario que propuso el Proveedor.'}
+              </p>
+
+              <dl className="row g-2 small mb-0">
+                <dt className="col-12 col-sm-4 text-muted fw-normal">
+                  Horario propuesto
+                </dt>
+                <dd className="col-12 col-sm-8 mb-2 text-dark">
+                  {formatearLocalDateTime(detalle.fecha_hora_propuesta) || 'No informado'}
+                  {horarioPropuesto ? ` · ${horarioPropuesto}` : ''}
+                </dd>
+
+                {sugerida && (
+                  <>
+                    <dt className="col-12 col-sm-4 text-muted fw-normal">
+                      Horario solicitado originalmente
+                    </dt>
+                    <dd className="col-12 col-sm-8 mb-2 text-dark">
+                      {formatearLocalDateTime(detalle.fecha_hora_solicitada) ||
+                        'No informado'}
+                    </dd>
+                  </>
+                )}
+
+                <dt className="col-12 col-sm-4 text-muted fw-normal">
+                  Duración conservada
+                </dt>
+                <dd className="col-12 col-sm-8 mb-0 text-dark">
+                  {duracion || 'No disponible'}
+                </dd>
+              </dl>
+
+              {sugerida && (
+                <div className="pt-3 mt-3 border-top">
+                  {respuesta.tipo === null && (
+                    <div className="d-flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-success"
+                        onClick={() => {
+                          setMensajeRespuesta(null);
+                          setRespuesta({ tipo: 'aceptar' });
+                        }}
+                      >
+                        Aceptar horario propuesto
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger"
+                        onClick={() => {
+                          setMensajeRespuesta(null);
+                          setRespuesta({ tipo: 'rechazar' });
+                        }}
+                      >
+                        Rechazar contrapropuesta
+                      </button>
+                    </div>
+                  )}
+
+                  {respuesta.tipo === 'aceptar' && (
+                    <div
+                      className="border rounded bg-light p-3"
+                      role="group"
+                      aria-label="Confirmar aceptación de la contrapropuesta"
+                    >
+                      <p className="fw-semibold mb-1">
+                        ¿Confirmas el horario propuesto?
+                      </p>
+                      <p className="small text-muted mb-3">
+                        Se confirmará el{' '}
+                        {formatearLocalDateTime(detalle.fecha_hora_propuesta)} para el
+                        servicio conservado. El servidor volverá a comprobar la
+                        disponibilidad y que no exista otra reserva aceptada en ese
+                        periodo.
+                      </p>
+                      <div className="d-flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-success btn-sm"
+                          onClick={confirmarAceptacion}
+                          disabled={procesandoRespuesta}
+                        >
+                          {procesandoRespuesta ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-1"
+                                role="status"
+                                aria-hidden="true"
+                              />
+                              Aceptando...
+                            </>
+                          ) : (
+                            'Confirmar aceptación'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary btn-sm"
+                          onClick={cerrarConfirmacion}
+                          disabled={procesandoRespuesta}
+                        >
+                          Volver
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {respuesta.tipo === 'rechazar' && (
+                    <div
+                      className="border rounded bg-light p-3"
+                      role="group"
+                      aria-label="Confirmar rechazo de la contrapropuesta"
+                    >
+                      <p className="fw-semibold mb-1">
+                        ¿Rechazas la contrapropuesta?
+                      </p>
+                      <p className="small text-muted mb-3">
+                        La solicitud quedará <strong>cancelada</strong> y no se generará
+                        una reserva.
+                      </p>
+                      <div className="d-flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={confirmarRechazo}
+                          disabled={procesandoRespuesta}
+                        >
+                          {procesandoRespuesta ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-1"
+                                role="status"
+                                aria-hidden="true"
+                              />
+                              Rechazando...
+                            </>
+                          ) : (
+                            'Confirmar rechazo'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary btn-sm"
+                          onClick={cerrarConfirmacion}
+                          disabled={procesandoRespuesta}
+                        >
+                          Volver
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {motivo &&
           (motivo.motivo ? (

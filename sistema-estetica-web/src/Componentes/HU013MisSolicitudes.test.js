@@ -2,8 +2,10 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MisSolicitudes } from './MisSolicitudes';
 import {
+  aceptarContrapropuesta,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
+  rechazarContrapropuesta,
 } from '../Servicios/solicitudService';
 import { consultarProveedorPorId } from '../Servicios/exploracionService';
 
@@ -117,6 +119,8 @@ const abrirDetalle = async (idSolicitud) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  aceptarContrapropuesta.mockReset();
+  rechazarContrapropuesta.mockReset();
   consultarMisSolicitudes.mockResolvedValue([SOLICITUD_A]);
   consultarDetalleSolicitud.mockResolvedValue(SOLICITUD_A);
   consultarProveedorPorId.mockImplementation((id) => {
@@ -125,6 +129,16 @@ beforeEach(() => {
     return Promise.resolve({ id, nombre: 'Proveedor', apellido: String(id) });
   });
 });
+
+const SOLICITUD_SUGERIDA = {
+  ...SOLICITUD_A,
+  id_solicitud: 7,
+  estado: 'sugerida',
+  fecha_hora_solicitada: '2026-11-12T10:00:00',
+  fecha_hora_propuesta: '2026-11-13T15:30:00',
+  fecha_creacion: '2026-11-04T10:00:00',
+  fecha_actualizacion: '2026-11-04T12:00:00',
+};
 
 describe('HU-013: listado de solicitudes y reservas', () => {
   test('muestra únicamente los registros propios con estado, proveedor, fecha y precio', async () => {
@@ -459,5 +473,157 @@ describe('HU-013: detalle de la solicitud', () => {
 
     expect(await screen.findByText('Proveedor Cinco')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('HU-016: respuesta del Cliente a la contrapropuesta', () => {
+  const abrirSugerida = async () => {
+    consultarMisSolicitudes.mockResolvedValue([SOLICITUD_SUGERIDA]);
+    consultarDetalleSolicitud.mockResolvedValue(SOLICITUD_SUGERIDA);
+
+    renderizar();
+    await esperarListado();
+    await abrirDetalle(7);
+  };
+
+  test('muestra la contrapropuesta, el horario original y las acciones', async () => {
+    await abrirSugerida();
+
+    expect(
+      screen.getByText('El Proveedor propuso un nuevo horario')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/13\/11\/2026 15:30/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Horario solicitado originalmente')).toBeInTheDocument();
+    expect(screen.getByText(/12\/11\/2026 10:00/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Aceptar horario propuesto' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Rechazar contrapropuesta' })
+    ).toBeInTheDocument();
+  });
+
+  test('acepta la contrapropuesta tras confirmar y actualiza el estado', async () => {
+    aceptarContrapropuesta.mockResolvedValue({
+      ...SOLICITUD_SUGERIDA,
+      estado: 'aceptada',
+      fecha_hora_solicitada: '2026-11-13T15:30:00',
+      fecha_actualizacion: '2026-11-23T10:00:00',
+    });
+
+    await abrirSugerida();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aceptar horario propuesto' })
+    );
+    expect(screen.getByText('¿Confirmas el horario propuesto?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aceptación' }));
+
+    await waitFor(() =>
+      expect(aceptarContrapropuesta).toHaveBeenCalledWith('token-cliente', 7)
+    );
+    expect(
+      await screen.findByText(/Horario confirmado\. La solicitud quedó aceptada\./)
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Aceptada').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole('button', { name: 'Aceptar horario propuesto' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Horario confirmado de la contrapropuesta')
+    ).toBeInTheDocument();
+  });
+
+  test('rechaza la contrapropuesta tras confirmar y deja la solicitud cancelada', async () => {
+    rechazarContrapropuesta.mockResolvedValue({
+      ...SOLICITUD_SUGERIDA,
+      estado: 'cancelada',
+      fecha_actualizacion: '2026-11-23T10:00:00',
+    });
+
+    await abrirSugerida();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Rechazar contrapropuesta' })
+    );
+    expect(screen.getByText('¿Rechazas la contrapropuesta?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
+
+    await waitFor(() =>
+      expect(rechazarContrapropuesta).toHaveBeenCalledWith('token-cliente', 7)
+    );
+    expect(
+      await screen.findByText(
+        /Contrapropuesta rechazada\. La solicitud quedó cancelada\./
+      )
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Cancelada').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole('button', { name: 'Rechazar contrapropuesta' })
+    ).not.toBeInTheDocument();
+  });
+
+  test('informa el conflicto al aceptar y conserva la solicitud como Sugerida', async () => {
+    aceptarContrapropuesta.mockRejectedValue(
+      Object.assign(
+        new Error('El horario se cruza con otra reserva aceptada (CA-03)'),
+        { status: 400 }
+      )
+    );
+
+    await abrirSugerida();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aceptar horario propuesto' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aceptación' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /se cruza con otra reserva aceptada/i
+    );
+    expect(screen.getAllByText('Sugerida').length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: 'Confirmar aceptación' })
+    ).toBeInTheDocument();
+  });
+
+  test('no muestra acciones cuando la solicitud no está Sugerida', async () => {
+    renderizar();
+    await esperarListado();
+    await abrirDetalle(4);
+
+    expect(
+      screen.queryByRole('button', { name: 'Aceptar horario propuesto' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Rechazar contrapropuesta' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('El Proveedor propuso un nuevo horario')
+    ).not.toBeInTheDocument();
+  });
+
+  test('una contrapropuesta ya resuelta no se puede responder de nuevo', async () => {
+    const resuelta = {
+      ...SOLICITUD_SUGERIDA,
+      estado: 'cancelada',
+      motivo_rechazo_cancelacion: null,
+    };
+    consultarMisSolicitudes.mockResolvedValue([resuelta]);
+    consultarDetalleSolicitud.mockResolvedValue(resuelta);
+
+    renderizar();
+    await esperarListado();
+    await abrirDetalle(7);
+
+    expect(screen.getByText('Contrapropuesta del Proveedor')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Aceptar horario propuesto' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Rechazar contrapropuesta' })
+    ).not.toBeInTheDocument();
   });
 });

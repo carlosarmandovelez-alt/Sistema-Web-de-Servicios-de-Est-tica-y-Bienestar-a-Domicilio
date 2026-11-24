@@ -96,7 +96,7 @@ public class solicitudController {
     public ResponseEntity<solicitudResponseDTO> rechazarSolicitud(
             Authentication authentication, 
             @PathVariable Integer idSolicitud, 
-            @RequestBody respuestaSolicitudDTO dto) {
+            @Valid @RequestBody respuestaSolicitudDTO dto) {
         return ResponseEntity.ok(solicitudService.rechazarSolicitud(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
     }
 

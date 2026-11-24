@@ -1,9 +1,12 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SolicitudesRecibidas } from './SolicitudesRecibidas';
 import {
+  aceptarSolicitud,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
+  proponerHorario,
+  rechazarSolicitud,
 } from '../Servicios/solicitudService';
 
 jest.mock('../Servicios/solicitudService');
@@ -102,6 +105,9 @@ const abrirDetalle = async (idSolicitud) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  aceptarSolicitud.mockReset();
+  rechazarSolicitud.mockReset();
+  proponerHorario.mockReset();
   consultarSolicitudesRecibidas.mockResolvedValue([SOLICITUD_A]);
   consultarDetalleRecibida.mockResolvedValue(SOLICITUD_A);
 });
@@ -268,9 +274,11 @@ describe('HU-014: detalle de una solicitud recibida', () => {
     expect(screen.getAllByText('04/11/2026 15:18').length).toBeGreaterThan(0);
     expect(screen.queryByText('Motivo de rechazo')).not.toBeInTheDocument();
     expect(screen.queryByText('Motivo de cancelación')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /Aceptar|Rechazar|Cancelar solicitud|Reprogramar/i })
-    ).not.toBeInTheDocument();
+
+    // HU-015: una solicitud Pendiente ofrece las tres acciones de respuesta.
+    expect(screen.getByRole('button', { name: 'Aceptar solicitud' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rechazar solicitud' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Proponer otro horario' })).toBeInTheDocument();
 
     expect(consultarDetalleRecibida).toHaveBeenCalledWith(
       'token-proveedor',
@@ -450,5 +458,207 @@ describe('HU-014: detalle de una solicitud recibida', () => {
       await screen.findByText('Todavía no has recibido solicitudes.')
     ).toBeInTheDocument();
     expect(consultarDetalleRecibida).not.toHaveBeenCalled();
+  });
+});
+
+const crearFechaFutura = (dias = 10) => {
+  const fecha = new Date();
+  fecha.setDate(fecha.getDate() + dias);
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  return {
+    iso: `${fecha.getFullYear()}-${mes}-${dia}`,
+    texto: `${dia}/${mes}/${fecha.getFullYear()}`,
+  };
+};
+
+const FECHA_FUTURA = crearFechaFutura(10);
+
+describe('HU-015: respuesta del Proveedor a una solicitud', () => {
+  const abrirSolicitudPendiente = async () => {
+    renderizar();
+    await esperarListado();
+    await abrirDetalle(4);
+  };
+
+  test('acepta una solicitud pendiente tras confirmar y actualiza el estado', async () => {
+    aceptarSolicitud.mockResolvedValue({
+      ...SOLICITUD_A,
+      estado: 'aceptada',
+      fecha_actualizacion: '2026-11-23T10:00:00',
+    });
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar solicitud' }));
+
+    expect(
+      screen.getByText('¿Confirmas la aceptación de esta solicitud?')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aceptación' }));
+
+    await waitFor(() =>
+      expect(aceptarSolicitud).toHaveBeenCalledWith('token-proveedor', 4)
+    );
+    expect(await screen.findByText(/Solicitud aceptada/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Aceptada').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole('button', { name: 'Aceptar solicitud' })
+    ).not.toBeInTheDocument();
+  });
+
+  test('exige un motivo antes de enviar el rechazo', async () => {
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar solicitud' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
+
+    expect(
+      await screen.findByText('El motivo del rechazo es obligatorio.')
+    ).toBeInTheDocument();
+    expect(rechazarSolicitud).not.toHaveBeenCalled();
+  });
+
+  test('rechaza con motivo y muestra el estado y el motivo confirmados', async () => {
+    rechazarSolicitud.mockResolvedValue({
+      ...SOLICITUD_A,
+      estado: 'rechazada',
+      motivo_rechazo_cancelacion: 'No tengo disponibilidad',
+      fecha_actualizacion: '2026-11-23T10:00:00',
+    });
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar solicitud' }));
+    fireEvent.change(screen.getByLabelText(/Motivo del rechazo/), {
+      target: { value: '  No tengo disponibilidad  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
+
+    await waitFor(() =>
+      expect(rechazarSolicitud).toHaveBeenCalledWith(
+        'token-proveedor',
+        4,
+        'No tengo disponibilidad'
+      )
+    );
+    expect(await screen.findByText(/Solicitud rechazada/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Rechazada').length).toBeGreaterThan(0);
+    expect(screen.getByText('Motivo de rechazo')).toBeInTheDocument();
+    expect(screen.getByText('No tengo disponibilidad')).toBeInTheDocument();
+  });
+
+  test('propone un horario válido y deja la solicitud en estado Sugerida', async () => {
+    proponerHorario.mockResolvedValue({
+      ...SOLICITUD_A,
+      estado: 'sugerida',
+      fecha_hora_propuesta: `${FECHA_FUTURA.iso}T09:00:00`,
+      fecha_actualizacion: '2026-11-23T10:00:00',
+    });
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Proponer otro horario' }));
+    fireEvent.change(screen.getByLabelText(/Nueva fecha/), {
+      target: { value: FECHA_FUTURA.iso },
+    });
+    fireEvent.change(screen.getByLabelText(/Nueva hora de inicio/), {
+      target: { value: '09:00' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar contrapropuesta' }));
+
+    await waitFor(() =>
+      expect(proponerHorario).toHaveBeenCalledWith(
+        'token-proveedor',
+        4,
+        `${FECHA_FUTURA.iso}T09:00:00`
+      )
+    );
+    expect(await screen.findByText(/Contrapropuesta enviada/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Sugerida').length).toBeGreaterThan(0);
+    expect(screen.getByText('Nueva fecha propuesta')).toBeInTheDocument();
+  });
+
+  test('rechaza una propuesta idéntica al horario solicitado', async () => {
+    consultarDetalleRecibida.mockResolvedValue({
+      ...SOLICITUD_A,
+      fecha_hora_solicitada: `${FECHA_FUTURA.iso}T13:00:00`,
+    });
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Proponer otro horario' }));
+    fireEvent.change(screen.getByLabelText(/Nueva fecha/), {
+      target: { value: FECHA_FUTURA.iso },
+    });
+    fireEvent.change(screen.getByLabelText(/Nueva hora de inicio/), {
+      target: { value: '13:00' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar contrapropuesta' }));
+
+    expect(
+      await screen.findByText(/debe ser diferente a la solicitada/i)
+    ).toBeInTheDocument();
+    expect(proponerHorario).not.toHaveBeenCalled();
+  });
+
+  test('informa el error de disponibilidad al aceptar y conserva el estado', async () => {
+    aceptarSolicitud.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'El horario solicitado no se encuentra dentro de la disponibilidad del proveedor'
+        ),
+        { status: 400 }
+      )
+    );
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar solicitud' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aceptación' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /no se encuentra dentro de la disponibilidad/i
+    );
+    expect(screen.getAllByText('Pendiente').length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: 'Confirmar aceptación' })
+    ).toBeInTheDocument();
+  });
+
+  test('evita envíos duplicados mientras la aceptación está en curso', async () => {
+    let resolver;
+    aceptarSolicitud.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve;
+      })
+    );
+
+    await abrirSolicitudPendiente();
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar solicitud' }));
+
+    const boton = screen.getByRole('button', { name: 'Confirmar aceptación' });
+    fireEvent.click(boton);
+    fireEvent.click(boton);
+
+    await waitFor(() => expect(aceptarSolicitud).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      resolver({ ...SOLICITUD_A, estado: 'aceptada' });
+    });
+  });
+
+  test('no ofrece acciones para una solicitud ya procesada', async () => {
+    consultarDetalleRecibida.mockResolvedValue({
+      ...SOLICITUD_A,
+      estado: 'aceptada',
+    });
+
+    await abrirSolicitudPendiente();
+
+    expect(
+      screen.queryByRole('button', { name: 'Aceptar solicitud' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Rechazar solicitud' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Proponer otro horario' })
+    ).not.toBeInTheDocument();
   });
 });

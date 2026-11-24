@@ -15,6 +15,7 @@ import com.backend.backend.Model.enums.estadoSolicitudModel;
 import com.backend.backend.Repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -304,18 +305,36 @@ public class solicitudService {
 
     // HU-015: Aceptar Solicitud (CA-01, CA-02, CA-03)
 
-    @Transactional
+    /**
+     * CA-11: la aceptación se ejecuta en una transacción READ_COMMITTED y
+     * comienza bloqueando la fila del Proveedor con un bloqueo pesimista.
+     *
+     * - El bloqueo serializa todas las aceptaciones del mismo Proveedor: si
+     *   dos solicitudes distintas se aceptan a la vez, la segunda espera a que
+     *   la primera confirme y luego revalida el solapamiento ya con la reserva
+     *   visible, por lo que como máximo una queda Aceptada.
+     * - READ_COMMITTED evita que una lectura repetible use una "foto" anterior
+     *   al commit de la otra transacción.
+     * - Cualquier excepción de negocio es una RuntimeException, por lo que la
+     *   transacción completa hace rollback (CA-12).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public solicitudResponseDTO aceptarSolicitud(String emailProveedor, Integer idSolicitud) {
-        proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
+        // 1. Identidad del Proveedor desde el JWT y bloqueo de su fila.
+        proveedorModel proveedorRef = obtenerProveedorPorEmail(emailProveedor);
+        proveedorModel proveedor = proveedorRepository.buscarPorIdConBloqueo(proveedorRef.getId_proveedor())
+            .orElseThrow(() -> new RuntimeException("Proveedor no encontrado"));
+
+        // 2. Propiedad y estado Pendiente (lectura con bloqueo de la solicitud).
         solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
 
-        // Revalidar que el horario siga estando disponible (CA-02)
+        // 3. Revalidar que el horario siga estando disponible (CA-02).
         validarDisponibilidad(proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
 
-        // Validar solapamiento (CA-03)
+        // 4. Validar solapamiento con reservas aceptadas (CA-03).
         validarSolapamiento(proveedor, solicitud.getFecha_hora_solicitada(), solicitud.getDuracion_snapshot_minutos());
 
-        // Cambiar estado
+        // 5. Cambiar estado (CA-01).
         solicitud.setEstado(estadoSolicitudModel.aceptada);
         solicitud.setFecha_actualizacion(LocalDateTime.now());
         
@@ -334,7 +353,7 @@ public class solicitudService {
         }
 
         solicitud.setEstado(estadoSolicitudModel.rechazada);
-        solicitud.setMotivo_rechazo_cancelacion(motivo);
+        solicitud.setMotivo_rechazo_cancelacion(motivo.trim());
         solicitud.setFecha_actualizacion(LocalDateTime.now());
         
         return convertirADTO(solicitudReservaRepository.save(solicitud));
@@ -347,7 +366,17 @@ public class solicitudService {
         proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
         solicitud_reservaModel solicitud = obtenerSolicitudPendienteDelProveedor(idSolicitud, proveedor);
 
-        // Validar que el nuevo horario esté en la disponibilidad (CA-07)
+        if (nuevaFecha == null) {
+            throw new horarioInvalidoException("La nueva fecha y hora es obligatoria");
+        }
+
+        // CA-06: la propuesta debe ser un horario diferente al solicitado.
+        if (nuevaFecha.withNano(0).equals(solicitud.getFecha_hora_solicitada().withNano(0))) {
+            throw new horarioInvalidoException(
+                "La nueva fecha y hora debe ser diferente a la fecha y hora solicitada por el Cliente");
+        }
+
+        // Validar que el nuevo horario esté en la disponibilidad (CA-06, CA-07)
         validarDisponibilidad(proveedor, nuevaFecha, solicitud.getDuracion_snapshot_minutos());
 
         solicitud.setEstado(estadoSolicitudModel.sugerida);
@@ -360,18 +389,39 @@ public class solicitudService {
 
 
     // HU-016: Aceptar contrapropuesta (Cliente) - CA-01, CA-02, CA-03
-    @Transactional
+
+    /**
+     * HU-016 (CA-09): la confirmación del Cliente bloquea primero la fila del
+     * Proveedor y después relee la solicitud con bloqueo, dentro de una
+     * transacción READ_COMMITTED, igual que la aceptación del Proveedor.
+     *
+     * Así, si dos Clientes aceptan contrapropuestas solapadas del mismo
+     * Proveedor a la vez, la segunda transacción espera a que la primera
+     * confirme y vuelve a consultar las reservas aceptadas ya con la reserva
+     * visible, por lo que falla por solapamiento y permanece Sugerida.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public solicitudResponseDTO aceptarContrapropuesta(String emailCliente, Integer idSolicitud) {
         clienteModel cliente = obtenerClientePorEmail(emailCliente);
+
+        // 1. Lectura inicial para conocer el Proveedor cuya fila se bloqueará.
+        solicitud_reservaModel referencia = solicitudReservaRepository.buscarPorIdYCliente(idSolicitud, cliente)
+            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
+        proveedorModel proveedor = referencia.getProveedor();
+
+        // 2. Bloqueo pesimista del Proveedor: serializa sus confirmaciones.
+        proveedorRepository.buscarPorIdConBloqueo(proveedor.getId_proveedor())
+            .orElseThrow(() -> new RuntimeException("Proveedor no encontrado"));
+
+        // 3. Relectura bloqueada y validación del estado Sugerida.
         solicitud_reservaModel solicitud = obtenerSolicitudSugeridaDelCliente(idSolicitud, cliente);
 
-        // Revalidar disponibilidad y solapamiento (CA-02 y CA-03)
+        // 4. Revalidar disponibilidad y solapamiento con el horario propuesto.
         validarDisponibilidad(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
         validarSolapamiento(solicitud.getProveedor(), solicitud.getFecha_hora_propuesta(), solicitud.getDuracion_snapshot_minutos());
 
-        // Cambiar a Aceptada
+        // 5. Confirmar: el horario propuesto pasa a ser el horario de la reserva.
         solicitud.setEstado(estadoSolicitudModel.aceptada);
-        // Opcional: Actualizar la fecha solicitada a la propuesta para que quede consolidada
         solicitud.setFecha_hora_solicitada(solicitud.getFecha_hora_propuesta());
         solicitud.setFecha_actualizacion(LocalDateTime.now());
         
@@ -379,18 +429,17 @@ public class solicitudService {
     }
 
 
-    // HU-016: Rechazar contrapropuesta (Cliente) - CA-04
+    // HU-016: Rechazar contrapropuesta (Cliente)
     @Transactional
     public solicitudResponseDTO rechazarContrapropuesta(String emailCliente, Integer idSolicitud, String motivo) {
         clienteModel cliente = obtenerClientePorEmail(emailCliente);
         solicitud_reservaModel solicitud = obtenerSolicitudSugeridaDelCliente(idSolicitud, cliente);
 
+        // HU-016 no exige motivo; si el Cliente lo envía, se conserva.
         solicitud.setEstado(estadoSolicitudModel.cancelada);
-        // Si el motivo es obligatorio por regla de negocio (RN-09), lo validamos:
-        if (motivo == null || motivo.trim().isEmpty()) {
-            throw new disponibilidadException("El motivo de cancelación es obligatorio"); 
+        if (motivo != null && !motivo.trim().isEmpty()) {
+            solicitud.setMotivo_rechazo_cancelacion(motivo.trim());
         }
-        solicitud.setMotivo_rechazo_cancelacion(motivo);
         solicitud.setFecha_actualizacion(LocalDateTime.now());
         
         return convertirADTO(solicitudReservaRepository.save(solicitud));
@@ -406,11 +455,14 @@ public class solicitudService {
     }
 
     private solicitud_reservaModel obtenerSolicitudSugeridaDelCliente(Integer idSolicitud, clienteModel cliente) {
-        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYCliente(idSolicitud, cliente)
-            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece (CA-06)"));
+        // La lectura bloquea la fila: aceptar y rechazar la misma
+        // contrapropuesta se serializan y la segunda ve el estado confirmado.
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYClienteConBloqueo(idSolicitud, cliente)
+            .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
 
         if (solicitud.getEstado() != estadoSolicitudModel.sugerida) {
-            throw new estadoInvalidoException("La solicitud no se encuentra en estado Sugerida (CA-07)");
+            throw new estadoInvalidoException(
+                "La solicitud ya no se encuentra en estado Sugerida y no admite respuestas a la contrapropuesta");
         }
         return solicitud;
     }
@@ -418,11 +470,15 @@ public class solicitudService {
 
     // MÉTODOS AUXILIARES PARA HU-015
     private solicitud_reservaModel obtenerSolicitudPendienteDelProveedor(Integer idSolicitud, proveedorModel proveedor) {
-        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+        // La lectura bloquea la fila de la solicitud: si dos respuestas del
+        // Proveedor compiten por la misma solicitud, se serializan y la
+        // segunda ya observa el estado confirmado por la primera (CA-10).
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedorConBloqueo(idSolicitud, proveedor)
             .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no está dirigida a usted (CA-08)"));
 
         if (solicitud.getEstado() != estadoSolicitudModel.pendiente) {
-            throw new estadoInvalidoException("La solicitud no se encuentra en estado Pendiente (CA-10)");
+            throw new estadoInvalidoException(
+                "La solicitud ya fue procesada o no admite nuevas respuestas (CA-10)");
         }
         return solicitud;
     }

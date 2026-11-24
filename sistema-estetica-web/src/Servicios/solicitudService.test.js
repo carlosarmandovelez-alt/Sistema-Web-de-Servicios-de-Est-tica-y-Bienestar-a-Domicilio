@@ -1,9 +1,11 @@
 import {
+  aceptarContrapropuesta,
   consultarDetalleRecibida,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
   consultarSolicitudesRecibidas,
   crearSolicitud,
+  rechazarContrapropuesta,
 } from './solicitudService';
 
 const respuesta = (status, body) => ({
@@ -341,5 +343,92 @@ describe('HU-014: consultas de solicitudes recibidas por el Proveedor', () => {
       esErrorAutenticacion: true,
     });
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('HU-016: respuesta del Cliente a la contrapropuesta', () => {
+  const fetchOriginal = global.fetch;
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    jest.restoreAllMocks();
+  });
+
+  test('acepta la contrapropuesta con PATCH autenticado del Cliente', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, { id_solicitud: 7, estado: 'aceptada' })
+    );
+
+    const data = await aceptarContrapropuesta('token-cliente', 7);
+
+    expect(data).toEqual({ id_solicitud: 7, estado: 'aceptada' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/mis-solicitudes/7/aceptar-propuesta',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer token-cliente' },
+      })
+    );
+  });
+
+  test('rechaza la contrapropuesta con un cuerpo vacío cuando no hay motivo', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, { id_solicitud: 7, estado: 'cancelada' })
+    );
+
+    const data = await rechazarContrapropuesta('token-cliente', 7);
+
+    expect(data).toEqual({ id_solicitud: 7, estado: 'cancelada' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/mis-solicitudes/7/rechazar-propuesta',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer token-cliente',
+        },
+        body: '{}',
+      })
+    );
+  });
+
+  test('incluye el motivo cuando el Cliente lo envía', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, { id_solicitud: 7, estado: 'cancelada' })
+    );
+
+    await rechazarContrapropuesta('token-cliente', 7, 'Ya no lo necesito');
+
+    const [, opciones] = global.fetch.mock.calls[0];
+    expect(JSON.parse(opciones.body)).toEqual({ motivo_rechazo: 'Ya no lo necesito' });
+  });
+
+  test('no llama al backend sin token de Cliente', async () => {
+    global.fetch = jest.fn();
+
+    await expect(aceptarContrapropuesta(null, 7)).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    await expect(rechazarContrapropuesta(undefined, 7)).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('propaga el error cuando el horario ya no está disponible', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(400, {
+        error:
+          'El horario solicitado no se encuentra dentro de la disponibilidad del proveedor',
+      })
+    );
+
+    await expect(aceptarContrapropuesta('token-cliente', 7)).rejects.toMatchObject({
+      status: 400,
+      message:
+        'El horario solicitado no se encuentra dentro de la disponibilidad del proveedor',
+    });
   });
 });
