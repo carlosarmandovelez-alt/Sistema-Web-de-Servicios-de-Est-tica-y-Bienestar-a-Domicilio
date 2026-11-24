@@ -4,8 +4,28 @@ import {
   actualizarPerfilProveedor,
   actualizarZonasAtencion,
 } from '../Servicios/proveedorService';
+import { RegistrarServicio } from './RegistrarServicio';
+import { GestionInformacionComplementaria } from './GestionInformacionComplementaria';
+import { GestionDisponibilidad } from './GestionDisponibilidad';
+import { SolicitudesRecibidas } from './SolicitudesRecibidas';
+import { MiAgenda } from './MiAgenda';
+
+const TABS = {
+  PERFIL: 'perfil',
+  SOLICITUDES: 'solicitudes',
+  AGENDA: 'agenda',
+  SERVICIOS: 'servicios',
+  COMPLEMENTARIA: 'complementaria',
+  DISPONIBILIDAD: 'disponibilidad',
+};
 
 export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) => {
+
+  const [tabActiva, setTabActiva] = useState(TABS.PERFIL);
+  // Servicio seleccionado desde el catálogo para gestionar su información complementaria (HU-008)
+  const [servicioComplementario, setServicioComplementario] = useState(null);
+  // Mensaje de sesion expirada proveniente de RegistrarServicio
+  const [mensajeSesionExpirada, setMensajeSesionExpirada] = useState(null);
   // Estado general del perfil cargado desde el backend
   const [perfil, setPerfil] = useState(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
@@ -365,15 +385,15 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
       <header className="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-4 border-bottom">
         <div>
           <h2 className="h4 mb-1 text-primary fw-bold">Bienestar en Casa</h2>
-          <p className="text-muted small mb-0">Mi Perfil Profesional y Zonas de Atención</p>
+          <p className="text-muted small mb-0">Panel de Proveedor</p>
         </div>
-        <div className="d-flex align-items-center gap-3 mt-2 mt-sm-0">
+        <div className="d-flex flex-wrap align-items-center gap-2 gap-sm-3 mt-2 mt-sm-0">
           <span className="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-3">
             Proveedor: {perfil?.nombre || sesion?.nombre || 'Profesional'} {perfil?.apellido || ''}
           </span>
           <button
             type="button"
-            className="btn btn-outline-danger btn-sm"
+            className="btn btn-outline-danger btn-sm text-nowrap"
             onClick={onCerrarSesion}
           >
             Cerrar sesión
@@ -381,7 +401,140 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
         </div>
       </header>
 
-      {/* Alerta general de error */}
+      {/* Navegación por pestañas */}
+      <ul className="nav nav-tabs mb-4" role="tablist">
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.PERFIL}
+            className={`nav-link ${tabActiva === TABS.PERFIL ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.PERFIL)}
+          >
+            Mi Perfil Profesional
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.SOLICITUDES}
+            className={`nav-link ${tabActiva === TABS.SOLICITUDES ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.SOLICITUDES)}
+          >
+            Solicitudes recibidas
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.AGENDA}
+            className={`nav-link ${tabActiva === TABS.AGENDA ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.AGENDA)}
+          >
+            Mi agenda
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.SERVICIOS}
+            className={`nav-link ${tabActiva === TABS.SERVICIOS ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.SERVICIOS)}
+          >
+            Registrar Servicio
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.COMPLEMENTARIA}
+            className={`nav-link ${tabActiva === TABS.COMPLEMENTARIA ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.COMPLEMENTARIA)}
+          >
+            Información Complementaria
+          </button>
+        </li>
+        <li className="nav-item" role="presentation">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === TABS.DISPONIBILIDAD}
+            className={`nav-link ${tabActiva === TABS.DISPONIBILIDAD ? 'active fw-semibold' : 'text-secondary'}`}
+            onClick={() => setTabActiva(TABS.DISPONIBILIDAD)}
+          >
+            Disponibilidad
+          </button>
+        </li>
+      </ul>
+
+      {/* Alerta de sesión expirada */}
+      {mensajeSesionExpirada && (
+        <div className="alert alert-warning alert-dismissible fade show mb-4" role="alert" aria-live="polite">
+          <div className="d-flex justify-content-between align-items-center">
+            <span>{mensajeSesionExpirada}</span>
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm"
+              onClick={onCerrarSesion}
+            >
+              Cerrar sesión ahora
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tabActiva === TABS.SOLICITUDES ? (
+        <SolicitudesRecibidas
+          sesion={sesion}
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.AGENDA ? (
+        <MiAgenda
+          sesion={sesion}
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.SERVICIOS ? (
+        <RegistrarServicio
+          token={sesion?.token}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+          onGestionarInformacionComplementaria={(servicio) => {
+            setServicioComplementario(servicio);
+            setTabActiva(TABS.COMPLEMENTARIA);
+          }}
+        />
+      ) : tabActiva === TABS.COMPLEMENTARIA ? (
+        <GestionInformacionComplementaria
+          token={sesion?.token}
+          servicioInicial={servicioComplementario}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : tabActiva === TABS.DISPONIBILIDAD ? (
+        <GestionDisponibilidad
+          token={sesion?.token}
+          onSesionExpirada={(msg) =>
+            setMensajeSesionExpirada(
+              msg || 'Tu sesión ha expirado o no tienes autorización. Inicia sesión nuevamente.'
+            )
+          }
+          onCerrarSesion={onCerrarSesion}
+        />
+      ) : (
+        <>
+          {/* Alerta general de error */}
       {errorGeneral && (
         <div className="alert alert-danger alert-dismissible fade show mb-4" role="alert" aria-live="assertive">
           <div className="d-flex align-items-center justify-content-between">
@@ -669,7 +822,7 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
                           className={`form-control form-control-sm ${erroresZona.barrio_sector ? 'is-invalid' : ''}`}
                           value={formZona.barrio_sector}
                           onChange={handleChangeZona}
-                          placeholder="Ej: Chapinero, Poblado, Norte... (opcional)"
+                          placeholder="Ej: Granada, Arboleda, Ciudad jardín... (opcional)"
                           maxLength={150}
                           disabled={guardandoZonas}
                         />
@@ -812,6 +965,8 @@ export const PerfilProveedor = ({ sesion, onCerrarSesion, onActualizarSesion }) 
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

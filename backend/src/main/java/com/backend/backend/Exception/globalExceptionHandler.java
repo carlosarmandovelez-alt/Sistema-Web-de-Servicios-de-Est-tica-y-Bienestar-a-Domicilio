@@ -73,4 +73,54 @@ public class globalExceptionHandler {
     error.put("error", ex.getMessage());
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
+
+    @ExceptionHandler(horarioInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleHorarioInvalido(horarioInvalidoException ex) {
+    Map<String, String> error = new HashMap<>();
+    error.put("error", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(disponibilidadException.class)
+    public ResponseEntity<Map<String, String>> handleDisponibilidad(disponibilidadException ex) {
+    Map<String, String> error = new HashMap<>();
+    error.put("error", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+    
+    @ExceptionHandler(solicitudNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleSolicitudNoEncontrada(solicitudNoEncontradaException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(estadoInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleEstadoInvalido(estadoInvalidoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(formatoInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleFormatoInvalido(formatoInvalidoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(multimediaNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleMultimediaNoEncontrada(multimediaNoEncontradaException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(insumoNoEncontradoException.class)
+    public ResponseEntity<Map<String, String>> handleInsumoNoEncontrado(insumoNoEncontradoException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
 }

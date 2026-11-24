@@ -3,9 +3,11 @@ package com.backend.backend.Controller;
 import com.backend.backend.DTO.*;
 import com.backend.backend.Service.exploracionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -50,5 +52,15 @@ public class exploracionController {
     @GetMapping("/servicios/{idServicio}")
     public ResponseEntity<servicioDetalleDTO> consultarDetalleServicio(@PathVariable Integer idServicio) {
         return ResponseEntity.ok(exploracionService.consultarDetalleServicio(idServicio));
+    }
+
+    // HU-012: Horarios disponibles del Proveedor para un servicio y una fecha
+    @GetMapping("/proveedores/{idProveedor}/disponibilidad")
+    public ResponseEntity<disponibilidadPublicaDTO> consultarDisponibilidadProveedor(
+            @PathVariable Integer idProveedor,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam Integer idServicio) {
+        return ResponseEntity.ok(
+            exploracionService.consultarDisponibilidadProveedor(idProveedor, idServicio, fecha));
     }
 }
