@@ -2,6 +2,7 @@ import {
   aceptarContrapropuesta,
   cancelarSolicitudCliente,
   cancelarSolicitudProveedor,
+  completarServicio,
   consultarDetalleRecibida,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
@@ -530,6 +531,71 @@ describe('HU-017: cancelación de solicitud o reserva', () => {
     await expect(
       cancelarSolicitudProveedor(undefined, 17, 'Motivo')
     ).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('HU-018: finalización del servicio', () => {
+  const fetchOriginal = global.fetch;
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    jest.restoreAllMocks();
+  });
+
+  test('envía el PATCH autenticado sin cuerpo al endpoint de finalización', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, {
+        id_solicitud: 18,
+        estado: 'completada',
+        fecha_actualizacion: '2026-11-24T10:00:00',
+      })
+    );
+
+    const data = await completarServicio('token-proveedor', 18);
+
+    expect(data).toMatchObject({
+      id_solicitud: 18,
+      estado: 'completada',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/recibidas/18/completar',
+      {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer token-proveedor' },
+      }
+    );
+  });
+
+  test('propaga el rechazo cuando la reserva ya no está Aceptada', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(400, {
+        error: 'Solo se pueden completar reservas que estén en estado Aceptada',
+      })
+    );
+
+    await expect(completarServicio('token-proveedor', 18)).rejects.toMatchObject({
+      status: 400,
+      message:
+        'Solo se pueden completar reservas que estén en estado Aceptada',
+    });
+  });
+
+  test('traduce un fallo de conexión en un mensaje comprensible', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(completarServicio('token-proveedor', 18)).rejects.toThrow(
+      'No fue posible conectar con el servidor. Verifica tu conexión a internet.'
+    );
+  });
+
+  test('no llama al backend sin token de Proveedor', async () => {
+    global.fetch = jest.fn();
+
+    await expect(completarServicio(null, 18)).rejects.toMatchObject({
       status: 401,
       esErrorAutenticacion: true,
     });

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   aceptarSolicitud,
   cancelarSolicitudProveedor,
+  completarServicio,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
   proponerHorario,
@@ -40,6 +41,10 @@ import {
   puedeCancelarComoProveedor,
   validarMotivoCancelacion,
 } from './solicitudCancelacionUtilidades';
+import {
+  mensajeErrorFinalizacion,
+  puedeFinalizarReserva,
+} from './solicitudFinalizacionUtilidades';
 
 /**
  * HU-014: consulta de solicitudes recibidas por el Proveedor.
@@ -154,6 +159,11 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
   const [procesandoCancelacion, setProcesandoCancelacion] = useState(false);
   const [mensajeCancelacion, setMensajeCancelacion] = useState(null);
 
+  // HU-018: finalización de una reserva Aceptada por el Proveedor.
+  const [finalizacion, setFinalizacion] = useState({ tipo: null });
+  const [procesandoFinalizacion, setProcesandoFinalizacion] = useState(false);
+  const [mensajeFinalizacion, setMensajeFinalizacion] = useState(null);
+
   const irAlInicio = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
       try {
@@ -256,6 +266,9 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     setErrorMotivoCancelacion(null);
     setMensajeCancelacion(null);
     setProcesandoCancelacion(false);
+    setFinalizacion({ tipo: null });
+    setMensajeFinalizacion(null);
+    setProcesandoFinalizacion(false);
   };
 
   const verDetalle = (idSolicitud) => {
@@ -420,7 +433,13 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
   };
 
   const iniciarCancelacion = () => {
-    if (procesandoCancelacion) return;
+    if (
+      procesandoCancelacion ||
+      procesandoFinalizacion ||
+      finalizacion.tipo === 'confirmar'
+    ) {
+      return;
+    }
     setMensajeCancelacion(null);
     setErrorMotivoCancelacion(null);
     setCancelacion({ tipo: 'confirmar' });
@@ -471,6 +490,71 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
       });
     } finally {
       setProcesandoCancelacion(false);
+    }
+  };
+
+  // ─── HU-018: finalización por el Proveedor ─────────────────────────────────
+
+  const cerrarFinalizacion = () => {
+    if (procesandoFinalizacion) return;
+    setFinalizacion({ tipo: null });
+  };
+
+  const iniciarFinalizacion = () => {
+    if (
+      procesandoFinalizacion ||
+      procesandoCancelacion ||
+      cancelacion.tipo === 'confirmar'
+    ) {
+      return;
+    }
+    setMensajeFinalizacion(null);
+    setFinalizacion({ tipo: 'confirmar' });
+  };
+
+  const ejecutarFinalizacion = async () => {
+    if (!detalle || procesandoFinalizacion) return;
+
+    setProcesandoFinalizacion(true);
+    setMensajeFinalizacion(null);
+
+    try {
+      const actualizada = await completarServicio(
+        sesion.token,
+        detalle.id_solicitud
+      );
+
+      if (
+        !actualizada ||
+        actualizada.id_solicitud === null ||
+        actualizada.id_solicitud === undefined
+      ) {
+        throw new Error('El servidor no confirmó la finalización del servicio.');
+      }
+
+      aplicarSolicitudActualizada(actualizada);
+      setFinalizacion({ tipo: null });
+      setMensajeFinalizacion({
+        tipo: 'exito',
+        texto: 'Servicio finalizado. La reserva quedó en estado Completada.',
+      });
+    } catch (error) {
+      setMensajeFinalizacion({
+        tipo: 'error',
+        texto: mensajeErrorFinalizacion(
+          error,
+          'No fue posible finalizar el servicio.'
+        ),
+      });
+
+      // Si el backend rechazó la transición, la copia local puede estar
+      // desactualizada. Se vuelve a consultar el detalle para reflejar el
+      // estado real sin inventar una transición exitosa.
+      if (error?.status === 400 || error?.status === 404) {
+        setIntentoDetalle((valor) => valor + 1);
+      }
+    } finally {
+      setProcesandoFinalizacion(false);
     }
   };
 
@@ -607,6 +691,18 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
             aria-live="polite"
           >
             {mensajeCancelacion.texto}
+          </div>
+        )}
+
+        {mensajeFinalizacion && (
+          <div
+            className={`alert ${
+              mensajeFinalizacion.tipo === 'exito' ? 'alert-success' : 'alert-danger'
+            }`}
+            role={mensajeFinalizacion.tipo === 'exito' ? 'status' : 'alert'}
+            aria-live="polite"
+          >
+            {mensajeFinalizacion.texto}
           </div>
         )}
 
@@ -887,6 +983,87 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
           </div>
         )}
 
+        {puedeFinalizarReserva(detalle) && (
+          <div
+            className="card shadow-sm border-0 mb-4"
+            aria-labelledby="finalizar-servicio-titulo"
+          >
+            <div className="card-body">
+              <h3
+                id="finalizar-servicio-titulo"
+                className="h5 fw-semibold text-dark mb-1"
+              >
+                Finalizar servicio
+              </h3>
+              <p className="small text-muted mb-3">
+                Marca la reserva como Completada después de prestar el servicio.
+                La operación conserva el historial y no se puede deshacer.
+              </p>
+
+              {finalizacion.tipo === null && (
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={iniciarFinalizacion}
+                  disabled={
+                    procesandoFinalizacion ||
+                    procesandoCancelacion ||
+                    cancelacion.tipo === 'confirmar'
+                  }
+                >
+                  Marcar como completada
+                </button>
+              )}
+
+              {finalizacion.tipo === 'confirmar' && (
+                <div
+                  className="border rounded bg-light p-3"
+                  role="group"
+                  aria-label="Confirmar finalización del servicio"
+                >
+                  <p className="fw-semibold mb-1">
+                    ¿Confirmas que el servicio ya fue prestado?
+                  </p>
+                  <p className="small text-muted mb-3">
+                    La reserva pasará de Aceptada a Completada y se actualizará
+                    la fecha de última modificación. Esta acción no se puede
+                    deshacer.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={ejecutarFinalizacion}
+                      disabled={procesandoFinalizacion}
+                    >
+                      {procesandoFinalizacion ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Finalizando...
+                        </>
+                      ) : (
+                        'Confirmar finalización'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cerrarFinalizacion}
+                      disabled={procesandoFinalizacion}
+                    >
+                      Volver
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {puedeCancelarComoProveedor(detalle) && (
           <div
             className="card shadow-sm border-0 mb-4"
@@ -910,6 +1087,11 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
                   type="button"
                   className="btn btn-outline-danger"
                   onClick={iniciarCancelacion}
+                  disabled={
+                    procesandoCancelacion ||
+                    procesandoFinalizacion ||
+                    finalizacion.tipo === 'confirmar'
+                  }
                 >
                   Cancelar reserva
                 </button>

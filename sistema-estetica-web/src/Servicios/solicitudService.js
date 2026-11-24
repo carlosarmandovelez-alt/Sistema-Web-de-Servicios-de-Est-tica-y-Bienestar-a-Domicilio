@@ -508,3 +508,27 @@ export const cancelarSolicitudProveedor = async (
     'Error al cancelar la reserva',
     { signal }
   );
+
+/**
+ * HU-018: marca como Completada una reserva Aceptada del Proveedor
+ * autenticado, después de prestar el servicio.
+ *
+ * Endpoint real:
+ *   PATCH /api/solicitudes/recibidas/{idSolicitud}/completar
+ *
+ * El backend determina el Proveedor desde el JWT, valida que la reserva le
+ * pertenezca y que esté exactamente en estado Aceptada. La operación no
+ * requiere cuerpo ni motivo.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {number|string} idSolicitud
+ * @returns {Promise<Object>} solicitudResponseDTO en estado completada.
+ */
+export const completarServicio = async (token, idSolicitud, { signal } = {}) =>
+  peticionPatchSolicitud(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/completar`,
+    null,
+    'Error al finalizar el servicio',
+    { signal }
+  );
