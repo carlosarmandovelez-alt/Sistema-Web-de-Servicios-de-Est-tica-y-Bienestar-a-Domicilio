@@ -34,12 +34,6 @@ import {
 
 /**
  * HU-012: Creación de una solicitud de servicio.
- *
- * El flujo se inicia desde el detalle de un servicio de HU-010 y conserva el
- * Proveedor y el servicio ya seleccionados. El backend es la autoridad final:
- * obtiene el Cliente del JWT, deriva el Proveedor del servicio, valida la
- * disponibilidad, asigna el estado "pendiente", registra las fechas de
- * auditoría y guarda la copia de nombre, precio y duración.
  */
 
 const FORMULARIO_INICIAL = {
@@ -74,10 +68,6 @@ const mensajePareceDeHorario = (mensaje) =>
     mensaje
   );
 
-/**
- * HU-012: mensajes para los casos en los que el Proveedor no tiene horas
- * disponibles. El motivo lo calcula el backend, que es la autoridad.
- */
 const MENSAJES_SIN_DISPONIBILIDAD = {
   SERVICIO_NO_DISPONIBLE: 'El servicio seleccionado ya no está disponible.',
   PERIODO_NO_DISPONIBLE:
@@ -302,8 +292,13 @@ const FormularioSolicitud = ({
   });
   const [intentoDisponibilidad, setIntentoDisponibilidad] = useState(0);
 
-  // Último valor del formulario, para consultar la hora elegida dentro del
-  // efecto de disponibilidad sin volver a ejecutarlo en cada cambio de hora.
+  // NUEVO: Estado para guardar los días de la semana que tienen disponibilidad
+  const [diasDisponibles, setDiasDisponibles] = useState({
+    cargando: false,
+    dias: [],
+    error: null
+  });
+
   const formularioRef = useRef(formulario);
   useEffect(() => {
     formularioRef.current = formulario;
@@ -311,9 +306,6 @@ const FormularioSolicitud = ({
 
   const fechaMinima = useMemo(() => obtenerFechaHoyISO(), []);
 
-  // Carga el servicio real y, como apoyo opcional, la dirección principal del
-  // Cliente registrada en HU-004. El servicio es obligatorio; el perfil no
-  // bloquea el formulario salvo que la sesión ya no sea válida.
   useEffect(() => {
     const controlador = new AbortController();
     let activo = true;
@@ -451,9 +443,66 @@ const FormularioSolicitud = ({
   const duracionTexto = formatearDuracionDetallada(duracion);
   const direccionPrincipal = estado.perfil?.direccionPrincipal || null;
 
-  // HU-012: consulta las horas reales del Proveedor cuando cambian el
-  // servicio o la fecha. Si la hora elegida deja de estar disponible, se
-  // limpia para que no se envíe un valor obsoleto.
+  // EFECTO MEJORADO: Consultar disponibilidad de los próximos 14 días
+  useEffect(() => {
+    if (!servicio || !servicio.id_proveedor) return;
+
+    let activo = true;
+    setDiasDisponibles({ cargando: true, dias: [], error: null });
+
+    const consultarSemana = async () => {
+      const diasEncontrados = [];
+      const hoy = new Date();
+      
+      const promesas = [];
+      // Ampliamos a 14 días para cubrir dos semanas completas
+      for (let i = 1; i <= 14; i++) {
+        const fecha = new Date(hoy);
+        fecha.setDate(hoy.getDate() + i);
+        const fechaStr = fecha.toISOString().split('T')[0]; 
+        
+        promesas.push(
+          consultarDisponibilidadProveedor(servicio.id_proveedor, fechaStr, servicio.id)
+            .then(res => ({ fecha, res }))
+            .catch(() => ({ fecha, res: null })) 
+        );
+      }
+
+      try {
+        const resultados = await Promise.all(promesas);
+        
+        if (!activo) return;
+
+        resultados.forEach(({ fecha, res }) => {
+          // Si el backend dice que hay horas disponibles, guardamos el nombre del día
+          if (res && Array.isArray(res.horas_disponibles) && res.horas_disponibles.length > 0) {
+            const nombreDia = fecha.toLocaleDateString('es-ES', { weekday: 'long' });
+            const diaCapitalizado = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);
+            if (!diasEncontrados.includes(diaCapitalizado)) {
+              diasEncontrados.push(diaCapitalizado);
+            }
+          }
+        });
+
+        // Ordenamos los días para que salgan de Lunes a Domingo y no en el orden en que se encontraron
+        const ordenDias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+        diasEncontrados.sort((a, b) => ordenDias.indexOf(a) - ordenDias.indexOf(b));
+
+        setDiasDisponibles({ cargando: false, dias: diasEncontrados, error: null });
+      } catch (error) {
+        if (activo) {
+          setDiasDisponibles({ cargando: false, dias: [], error: 'No se pudo consultar la disponibilidad semanal.' });
+        }
+      }
+    };
+
+    consultarSemana();
+
+    return () => {
+      activo = false;
+    };
+  }, [servicio]);
+
   useEffect(() => {
     if (!servicio || !esFechaValida(formulario.fecha)) {
       setDisponibilidad({ cargando: false, datos: null, error: null });
@@ -522,7 +571,6 @@ const FormularioSolicitud = ({
     setFormulario((previo) => ({
       ...previo,
       [name]: value,
-      // Al cambiar la fecha, la hora anterior deja de ser válida.
       ...(name === 'fecha' ? { hora: '' } : {}),
     }));
     if (errores[name]) {
@@ -606,8 +654,6 @@ const FormularioSolicitud = ({
       nuevosErrores.direccion_texto = 'La dirección no puede superar los 255 caracteres';
     }
 
-    // HU-012 exige el barrio o sector. El DTO del backend lo acepta opcional,
-    // pero la historia de usuario lo establece como información requerida.
     const barrio = formulario.barrio_sector.trim();
     if (!barrio) {
       nuevosErrores.barrio_sector = 'El barrio o sector es obligatorio';
@@ -761,9 +807,6 @@ const FormularioSolicitud = ({
     setEnviando(true);
 
     try {
-      // Antes de confirmar se vuelven a consultar las condiciones vigentes y
-      // se comprueba que el servicio siga perteneciendo al Proveedor y a su
-      // catálogo activo. El backend conserva la copia definitiva al guardar.
       let servicioActual;
       try {
         servicioActual = await consultarServicioPorId(payload.id_servicio);
@@ -1079,6 +1122,30 @@ const FormularioSolicitud = ({
               corresponden a la disponibilidad real del Proveedor para ese día.
             </p>
 
+            {/* NUEVO MENSAJE DE DÍAS DISPONIBLES */}
+            {diasDisponibles.cargando && (
+              <div className="d-flex align-items-center gap-2 text-muted mb-3" role="status">
+                <span className="spinner-border spinner-border-sm text-primary" aria-hidden="true" />
+                <span className="small">Consultando los días de atención del Proveedor...</span>
+              </div>
+            )}
+
+            {!diasDisponibles.cargando && diasDisponibles.dias.length > 0 && (
+              <div className="alert alert-primary py-2 mb-3" role="status">
+                <span className="fw-semibold">Días de atención del Proveedor: </span>
+                {diasDisponibles.dias.join(', ')}.
+                <span className="small d-block mt-1 text-muted">
+                  Selecciona una fecha que coincida con estos días para ver los horarios disponibles.
+                </span>
+              </div>
+            )}
+
+            {!diasDisponibles.cargando && diasDisponibles.dias.length === 0 && !diasDisponibles.error && (
+              <div className="alert alert-warning py-2 mb-3" role="status">
+                El Proveedor no tiene horarios disponibles en los próximos 7 días.
+              </div>
+            )}
+
             <div className="row g-3">
               <div className="col-12 col-sm-6">
                 <label htmlFor="solicitud-fecha" className="form-label small fw-semibold">
@@ -1200,8 +1267,13 @@ const FormularioSolicitud = ({
                         </div>
                       </div>
                     ) : (
-                      <div className="alert alert-info mb-0" role="status">
-                        {mensajeSinHorarios}
+                      <div className="alert alert-warning mb-0" role="status">
+                        <p className="fw-semibold mb-1">
+                          {disponibilidad.datos?.motivo === 'SIN_DISPONIBILIDAD_DIA' 
+                            ? 'El proveedor no atiende este día' 
+                            : 'No hay horarios disponibles'}
+                        </p>
+                        <p className="small mb-2">{mensajeSinHorarios}</p>
                       </div>
                     )}
 
@@ -1535,11 +1607,6 @@ const FormularioSolicitud = ({
   );
 };
 
-/**
- * Punto de entrada de HU-012. La comprobación de rol es una defensa adicional
- * de la interfaz; la autorización definitiva la realiza Spring Security y el
- * backend a partir del JWT.
- */
 export const SolicitudServicio = ({
   idServicio,
   idProveedor,
