@@ -117,11 +117,8 @@ public class servicioService {
         servicioModel servicio = servicioRepository.buscarPorIdYProveedor(idServicio, proveedor)
             .orElseThrow(() -> new servicioNoEncontradoException("El servicio no existe o no pertenece a su catálogo"));
         
-        
-        // HU-008 trabaja únicamente con URL: se valida que sea una URL http(s)
-        // válida. No se exige extensión de archivo porque el frontend admite
-        // cualquier URL de imagen o video (CDN, proxies, etc.).
-        String url = validarUrlMultimedia(dto.getUrl_archivo());
+        // Validación estricta de URL según tipo (foto/video)
+        String url = validarUrlMultimedia(dto.getUrl_archivo(), dto.getTipo_archivo().name());
 
         servicio_multimediaModel multimedia = new servicio_multimediaModel();
         multimedia.setServicio(servicio);
@@ -152,7 +149,7 @@ public class servicioService {
         servicio_multimediaModel multimedia = obtenerMultimediaDelServicio(idMultimedia, servicio);
 
         multimedia.setTipo_archivo(dto.getTipo_archivo());
-        multimedia.setUrl_archivo(validarUrlMultimedia(dto.getUrl_archivo()));
+        multimedia.setUrl_archivo(validarUrlMultimedia(dto.getUrl_archivo(), dto.getTipo_archivo().name()));
         if (dto.getOrden() != null) {
             multimedia.setOrden(dto.getOrden());
         }
@@ -224,18 +221,42 @@ public class servicioService {
     // Métodos auxiliares
 
     /**
-     * HU-008 trabaja únicamente con URL: se valida que sea una URL http(s)
-     * sin espacios. No se exige extensión porque el frontend admite
-     * cualquier referencia de imagen o video.
+     * HU-008: Valida que la URL sea válida y que coincida con el tipo de archivo.
      */
-    private String validarUrlMultimedia(String url) {
+    private String validarUrlMultimedia(String url, String tipoArchivo) {
         if (url == null || url.trim().isEmpty()) {
             throw new formatoInvalidoException("La URL del archivo no puede estar vacía.");
         }
+        
         String limpia = url.trim();
+        
+        // 1. Validar que sea una URL http/https básica
         if (!limpia.matches("(?i)^https?://\\S+$")) {
             throw new formatoInvalidoException("La URL debe iniciar con http:// o https:// y no contener espacios.");
         }
+
+        // 2. Validar que el tipo de archivo coincida con la URL
+        String urlSinParams = limpia.toLowerCase().split("\\?")[0];
+        
+        boolean esImagen = urlSinParams.endsWith(".jpg") || urlSinParams.endsWith(".jpeg") || 
+                           urlSinParams.endsWith(".png") || urlSinParams.endsWith(".gif") || 
+                           urlSinParams.endsWith(".webp");
+                           
+        boolean esVideo = urlSinParams.endsWith(".mp4") || urlSinParams.endsWith(".mov") || 
+                          urlSinParams.endsWith(".avi") || urlSinParams.endsWith(".mkv");
+
+        if (tipoArchivo != null && tipoArchivo.equalsIgnoreCase("foto")) {
+            if (!esImagen) {
+                throw new formatoInvalidoException("Si el tipo de archivo es 'foto', la URL debe terminar en un formato de imagen válido (jpg, png, etc).");
+            }
+        } else if (tipoArchivo != null && tipoArchivo.equalsIgnoreCase("video")) {
+            if (!esVideo) {
+                throw new formatoInvalidoException("Si el tipo de archivo es 'video', la URL debe terminar en un formato de video válido (mp4, mov, etc).");
+            }
+        } else {
+            throw new formatoInvalidoException("El tipo de archivo debe ser 'foto' o 'video'.");
+        }
+
         return limpia;
     }
 
