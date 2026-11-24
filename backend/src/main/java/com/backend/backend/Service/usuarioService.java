@@ -54,14 +54,14 @@ public class usuarioService {
         
         usuarioModel usuarioGuardado = usuarioRepository.save(usuario);
         
-        // ✅ Crear el registro en cliente o proveedor según el rol
+        // Crear el registro en cliente o proveedor según el rol
         if (dto.getRol().name().equals("cliente")) {
             clienteModel cliente = new clienteModel();
-            cliente.setUsuario(usuarioGuardado);  // ← Esto asigna el ID automáticamente
+            cliente.setUsuario(usuarioGuardado);  
             clienteRepository.save(cliente);
         } else if (dto.getRol().name().equals("proveedor")) {
             proveedorModel proveedor = new proveedorModel();
-            proveedor.setUsuario(usuarioGuardado);  // ← Esto asigna el ID automáticamente
+            proveedor.setUsuario(usuarioGuardado); 
             proveedorRepository.save(proveedor);
         }
         

@@ -31,11 +31,11 @@ public class jwtService {
         claims.put("idUsuario", idUsuario);
         
         return Jwts.builder()
-                .claims(claims)                                    // ← claims() en lugar de setClaims()
-                .subject(email)                                    // ← subject() en lugar de setSubject()
-                .issuedAt(new Date(System.currentTimeMillis()))    // ← issuedAt() en lugar de setIssuedAt()
-                .expiration(new Date(System.currentTimeMillis() + expiration))  // ← expiration()
-                .signWith(getSigningKey(), Jwts.SIG.HS256)         // ← Jwts.SIG en lugar de SignatureAlgorithm
+                .claims(claims)                                    
+                .subject(email)                                   
+                .issuedAt(new Date(System.currentTimeMillis()))    
+                .expiration(new Date(System.currentTimeMillis() + expiration)) 
+                .signWith(getSigningKey(), Jwts.SIG.HS256)        
                 .compact();
     }
     
@@ -61,11 +61,11 @@ public class jwtService {
     }
     
     private Claims extraerTodosLosClaims(String token) {
-        return Jwts.parser()                                       // ← parser() en lugar de parserBuilder()
-                .verifyWith(getSigningKey())                       // ← verifyWith() en lugar de setSigningKey()
+        return Jwts.parser()                                      
+                .verifyWith(getSigningKey())                      
                 .build()
-                .parseSignedClaims(token)                          // ← parseSignedClaims() en lugar de parseClaimsJws()
-                .getPayload();                                     // ← getPayload() en lugar de getBody()
+                .parseSignedClaims(token)                          
+                .getPayload();                                     
     }
     
     public boolean esTokenExpirado(String token) {

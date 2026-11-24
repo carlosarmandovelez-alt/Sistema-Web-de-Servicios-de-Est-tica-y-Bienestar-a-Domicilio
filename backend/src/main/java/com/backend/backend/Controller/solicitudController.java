@@ -1,6 +1,9 @@
 package com.backend.backend.Controller;
 
+import com.backend.backend.DTO.agendaResponseDTO;
+import com.backend.backend.DTO.contrapropuestaDTO;
 import com.backend.backend.DTO.crearSolicitudDTO;
+import com.backend.backend.DTO.respuestaSolicitudDTO;
 import com.backend.backend.DTO.solicitudResponseDTO;
 import com.backend.backend.Service.solicitudService;
 import jakarta.validation.Valid;
@@ -10,7 +13,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map; 
 
 @RestController
 @RequestMapping("/api/solicitudes")
@@ -30,14 +35,20 @@ public class solicitudController {
         return ResponseEntity.status(HttpStatus.CREATED).body(solicitud);
     }
 
-        // ============================================
+
     // HU-013: Endpoints del Cliente
-    // ============================================
+
     
     @GetMapping("/mis-solicitudes")
-    public ResponseEntity<List<solicitudResponseDTO>> listarSolicitudesCliente(Authentication authentication) {
+    public ResponseEntity<?> listarSolicitudesCliente(Authentication authentication) {
         String email = authentication.getName();
         List<solicitudResponseDTO> solicitudes = solicitudService.listarSolicitudesCliente(email);
+        
+        if (solicitudes.isEmpty()) {
+            Map<String, String> respuesta = new HashMap<>();
+            respuesta.put("mensaje", "No tienes solicitudes registradas actualmente.");
+            return ResponseEntity.status(HttpStatus.OK).body(respuesta); 
+        }
         return ResponseEntity.ok(solicitudes);
     }
 
@@ -51,15 +62,19 @@ public class solicitudController {
     }
 
 
-
-    // ============================================
     // HU-014: Endpoints del Proveedor
-    // ============================================
+
     
     @GetMapping("/recibidas")
-    public ResponseEntity<List<solicitudResponseDTO>> listarSolicitudesRecibidas(Authentication authentication) {
+    public ResponseEntity<?> listarSolicitudesRecibidas(Authentication authentication) {
         String email = authentication.getName();
         List<solicitudResponseDTO> solicitudes = solicitudService.listarSolicitudesProveedor(email);
+        
+        if (solicitudes.isEmpty()) {
+            Map<String, String> respuesta = new HashMap<>();
+            respuesta.put("mensaje", "No has recibido solicitudes de servicio.");
+            return ResponseEntity.status(HttpStatus.OK).body(respuesta);
+        }
         return ResponseEntity.ok(solicitudes);
     }
 
@@ -70,5 +85,95 @@ public class solicitudController {
         String email = authentication.getName();
         solicitudResponseDTO solicitud = solicitudService.consultarDetalleRecibida(email, idSolicitud);
         return ResponseEntity.ok(solicitud);
+    }
+
+
+    // HU-015: Endpoints de respuesta del Proveedor
+
+    
+    @PatchMapping("/recibidas/{idSolicitud}/aceptar")
+    public ResponseEntity<solicitudResponseDTO> aceptarSolicitud(Authentication authentication, @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.aceptarSolicitud(authentication.getName(), idSolicitud));
+    }
+
+    @PatchMapping("/recibidas/{idSolicitud}/rechazar")
+    public ResponseEntity<solicitudResponseDTO> rechazarSolicitud(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.rechazarSolicitud(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+    @PatchMapping("/recibidas/{idSolicitud}/proponer")
+    public ResponseEntity<solicitudResponseDTO> proponerHorario(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @Valid @RequestBody contrapropuestaDTO dto) {
+        return ResponseEntity.ok(solicitudService.proponerHorario(authentication.getName(), idSolicitud, dto.getFecha_hora_propuesta()));
+    }
+
+
+    // HU-016: Endpoints de respuesta del Cliente
+
+    
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/aceptar-propuesta")
+    public ResponseEntity<solicitudResponseDTO> aceptarContrapropuesta(Authentication authentication, @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.aceptarContrapropuesta(authentication.getName(), idSolicitud));
+    }
+
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/rechazar-propuesta")
+    public ResponseEntity<solicitudResponseDTO> rechazarContrapropuesta(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud, 
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.rechazarContrapropuesta(authentication.getName(), idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+
+    // HU-017: Endpoints de Cancelación
+
+
+    // Para el Cliente
+    @PatchMapping("/mis-solicitudes/{idSolicitud}/cancelar")
+    public ResponseEntity<solicitudResponseDTO> cancelarSolicitudCliente(
+            Authentication authentication,
+            @PathVariable Integer idSolicitud,
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "cliente", idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+    // Para el Proveedor
+    @PatchMapping("/recibidas/{idSolicitud}/cancelar")
+    public ResponseEntity<solicitudResponseDTO> cancelarSolicitudProveedor(
+            Authentication authentication,
+            @PathVariable Integer idSolicitud,
+            @RequestBody respuestaSolicitudDTO dto) {
+        return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "proveedor", idSolicitud, dto.getMotivo_rechazo()));
+    }
+
+
+    // HU-018: Endpoint de Finalización
+
+    
+    @PatchMapping("/recibidas/{idSolicitud}/completar")
+    public ResponseEntity<solicitudResponseDTO> completarServicio(
+            Authentication authentication, 
+            @PathVariable Integer idSolicitud) {
+        return ResponseEntity.ok(solicitudService.completarServicio(authentication.getName(), idSolicitud));
+    }
+
+
+    // HU-019: Endpoint de Agenda
+    
+    @GetMapping("/recibidas/agenda")
+    public ResponseEntity<?> consultarAgenda(Authentication authentication) {
+        List<agendaResponseDTO> agenda = solicitudService.consultarAgenda(authentication.getName());
+        
+        if (agenda.isEmpty()) {
+            Map<String, String> respuesta = new HashMap<>();
+            respuesta.put("mensaje", "No tienes reservas aceptadas en tu agenda.");
+            return ResponseEntity.status(HttpStatus.OK).body(respuesta);
+        }
+        return ResponseEntity.ok(agenda);
     }
 }

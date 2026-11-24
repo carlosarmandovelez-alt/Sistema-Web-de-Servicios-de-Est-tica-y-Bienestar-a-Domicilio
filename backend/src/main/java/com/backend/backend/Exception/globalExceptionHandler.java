@@ -95,17 +95,18 @@ public class globalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
-    @ExceptionHandler(multimediaNoEncontradaException.class)
-    public ResponseEntity<Map<String, String>> handleMultimediaNoEncontrada(multimediaNoEncontradaException ex) {
+    @ExceptionHandler(estadoInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleEstadoInvalido(estadoInvalidoException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    @ExceptionHandler(insumoNoEncontradoException.class)
-    public ResponseEntity<Map<String, String>> handleInsumoNoEncontrado(insumoNoEncontradoException ex) {
+    @ExceptionHandler(formatoInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleFormatoInvalido(formatoInvalidoException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
+
 }

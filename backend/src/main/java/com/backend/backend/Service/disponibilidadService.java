@@ -34,9 +34,9 @@ public class disponibilidadService {
     @Autowired
     private proveedorRepository proveedorRepository;
 
-    // ============================================
+
     // HU-011: Configurar Disponibilidad (CA-01, CA-02)
-    // ============================================
+
     @Transactional
     public List<disponibilidadResponseDTO> guardarDisponibilidad(String email, List<disponibilidadRequestDTO> dtos) {
         proveedorModel proveedor = obtenerProveedorPorEmail(email);
@@ -75,9 +75,7 @@ public class disponibilidadService {
             .collect(Collectors.toList());
     }
 
-    // ============================================
     // HU-011: Periodos No Disponibles (CA-03, CA-04)
-    // ============================================
     @Transactional
     public periodoNoDisponibleResponseDTO agregarPeriodoNoDisponible(String email, periodoNoDisponibleRequestDTO dto) {
         proveedorModel proveedor = obtenerProveedorPorEmail(email);
@@ -109,9 +107,7 @@ public class disponibilidadService {
             .collect(Collectors.toList());
     }
 
-    // ============================================
     // Auxiliar
-    // ============================================
     private proveedorModel obtenerProveedorPorEmail(String email) {
         usuarioModel usuario = usuarioRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));

@@ -33,10 +33,9 @@ public class exploracionService {
     
     @Autowired
     private servicioInsumoRepository servicioInsumoRepository;
-    
-    // ============================================
+
     // HU-009: Exploración de proveedores y servicios
-    // ============================================
+
     
     // CA-01: Consultar proveedores disponibles
     public List<proveedorListadoDTO> consultarProveedores() {
@@ -89,9 +88,9 @@ public class exploracionService {
             .collect(Collectors.toList());
     }
     
-    // ============================================
+
     // HU-010: Consulta del perfil del proveedor y detalle del servicio
-    // ============================================
+
     
     // CA-01, CA-02, CA-03: Consultar perfil del proveedor
     public proveedorDetalleDTO consultarPerfilProveedor(Integer idProveedor) {
