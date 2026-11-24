@@ -29,6 +29,12 @@ public class solicitudService {
 
     private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm");
 
+    /**
+     * La columna compartida `motivo_rechazo_cancelacion` es VARCHAR(255).
+     * No se modifica el esquema: se valida el mismo límite en el servicio.
+     */
+    private static final int MOTIVO_CANCELACION_MAX = 255;
+
     @Autowired
     private solicitudReservaRepository solicitudReservaRepository;
 
@@ -530,55 +536,128 @@ public class solicitudService {
 
 
     // HU-017: Cancelar solicitud o reserva
-    @Transactional
+
+    /**
+     * HU-017: cancela una solicitud o reserva propia del Cliente o del
+     * Proveedor autenticado.
+     *
+     * Reglas de estado:
+     * - Cliente: puede cancelar solicitudes Pendiente, Sugerida y reservas
+     *   Aceptada.
+     * - Proveedor: solo puede cancelar reservas Aceptada. Los criterios de
+     *   HU-017 no le atribuyen la cancelación de solicitudes Pendiente o
+     *   Sugerida.
+     *
+     * La lectura se hace con bloqueo pesimista sobre la fila de la solicitud
+     * para serializar la cancelación con las respuestas de HU-015/HU-016 y
+     * con la finalización de HU-018. El motivo se valida antes de modificar
+     * cualquier dato, por lo que un intento inválido no cambia el estado, el
+     * motivo ni la fecha de actualización (CA-05 a CA-08).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public solicitudResponseDTO cancelarSolicitud(String email, String rol, Integer idSolicitud, String motivo) {
-        // 1. Validar que el motivo sea obligatorio (CA-05)
-        if (motivo == null || motivo.trim().isEmpty()) {
-            throw new disponibilidadException("El motivo de cancelación es obligatorio");
+        if (!"cliente".equalsIgnoreCase(rol) && !"proveedor".equalsIgnoreCase(rol)) {
+            throw new estadoInvalidoException("El rol autenticado no puede cancelar solicitudes");
         }
 
         solicitud_reservaModel solicitud;
 
-        // 2. Buscar la solicitud dependiendo del rol y validar propiedad (CA-06)
-        if (rol.equals("cliente")) {
+        // 1. Identidad desde el JWT, propiedad real y bloqueo de la fila.
+        if ("cliente".equalsIgnoreCase(rol)) {
             clienteModel cliente = obtenerClientePorEmail(email);
-            solicitud = solicitudReservaRepository.buscarPorIdYCliente(idSolicitud, cliente)
+            solicitud = solicitudReservaRepository.buscarPorIdYClienteConBloqueo(idSolicitud, cliente)
                 .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
+            validarEstadoCancelableCliente(solicitud);
         } else {
             proveedorModel proveedor = obtenerProveedorPorEmail(email);
-            solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+            solicitud = solicitudReservaRepository.buscarPorIdYProveedorConBloqueo(idSolicitud, proveedor)
                 .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no le pertenece"));
+            validarEstadoCancelableProveedor(solicitud);
         }
 
-        // 3. Validar estados permitidos (CA-07 y CA-08)
-        if (solicitud.getEstado() == estadoSolicitudModel.completada) {
-            throw new estadoInvalidoException("No se puede cancelar una reserva que ya fue completada");
-        }
-        if (solicitud.getEstado() == estadoSolicitudModel.cancelada) {
-            throw new estadoInvalidoException("La solicitud ya se encuentra cancelada");
-        }
-        if (solicitud.getEstado() == estadoSolicitudModel.rechazada) {
-            throw new estadoInvalidoException("No se puede cancelar una solicitud que ya fue rechazada");
-        }
+        // 2. Motivo obligatorio, sin espacios sobrantes y dentro del límite
+        // real de la columna compartida (VARCHAR(255)).
+        String motivoNormalizado = validarMotivoCancelacion(motivo);
 
-        // 4. Realizar la cancelación (CA-01, CA-02, CA-03, CA-04)
+        // 3. Persistir la cancelación conservando el resto de la información.
         solicitud.setEstado(estadoSolicitudModel.cancelada);
-        solicitud.setMotivo_rechazo_cancelacion(motivo);
+        solicitud.setMotivo_rechazo_cancelacion(motivoNormalizado);
         solicitud.setFecha_actualizacion(LocalDateTime.now());
-        
+
         return convertirADTO(solicitudReservaRepository.save(solicitud));
+    }
+
+    private void validarEstadoCancelableCliente(solicitud_reservaModel solicitud) {
+        if (solicitud.getEstado() == null) {
+            throw new estadoInvalidoException("El estado actual de la solicitud no permite cancelarla");
+        }
+
+        switch (solicitud.getEstado()) {
+            case pendiente:
+            case sugerida:
+            case aceptada:
+                return;
+            case completada:
+                throw new estadoInvalidoException("No se puede cancelar una reserva que ya fue completada");
+            case cancelada:
+                throw new estadoInvalidoException("La solicitud ya se encuentra cancelada");
+            case rechazada:
+                throw new estadoInvalidoException("No se puede cancelar una solicitud que ya fue rechazada");
+            default:
+                throw new estadoInvalidoException("El estado actual de la solicitud no permite cancelarla");
+        }
+    }
+
+    private void validarEstadoCancelableProveedor(solicitud_reservaModel solicitud) {
+        if (solicitud.getEstado() == null) {
+            throw new estadoInvalidoException("El estado actual de la solicitud no permite cancelarla");
+        }
+
+        switch (solicitud.getEstado()) {
+            case aceptada:
+                return;
+            case pendiente:
+            case sugerida:
+                throw new estadoInvalidoException(
+                    "El Proveedor solo puede cancelar reservas en estado Aceptada");
+            case completada:
+                throw new estadoInvalidoException("No se puede cancelar una reserva que ya fue completada");
+            case cancelada:
+                throw new estadoInvalidoException("La solicitud ya se encuentra cancelada");
+            case rechazada:
+                throw new estadoInvalidoException("No se puede cancelar una solicitud que ya fue rechazada");
+            default:
+                throw new estadoInvalidoException("El estado actual de la solicitud no permite cancelarla");
+        }
+    }
+
+    private String validarMotivoCancelacion(String motivo) {
+        if (motivo == null || motivo.trim().isEmpty()) {
+            throw new disponibilidadException("El motivo de cancelación es obligatorio");
+        }
+
+        String motivoNormalizado = motivo.trim();
+        if (motivoNormalizado.length() > MOTIVO_CANCELACION_MAX) {
+            throw new disponibilidadException(
+                "El motivo de cancelación no puede superar los " + MOTIVO_CANCELACION_MAX + " caracteres");
+        }
+
+        return motivoNormalizado;
     }
 
 
 
     // HU-018: Finalizar servicio (Completar reserva)
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public solicitudResponseDTO completarServicio(String emailProveedor, Integer idSolicitud) {
         // 1. Obtener el proveedor autenticado
         proveedorModel proveedor = obtenerProveedorPorEmail(emailProveedor);
 
-        // 2. Buscar la solicitud y validar que le pertenezca al proveedor (CA-03)
-        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedor(idSolicitud, proveedor)
+        // 2. Buscar la solicitud bloqueando su fila y validar que le
+        // pertenezca al proveedor (CA-03). El bloqueo serializa esta
+        // transición con la cancelación de HU-017: si la reserva ya fue
+        // cancelada, aquí se observa el estado Cancelada y no se completa.
+        solicitud_reservaModel solicitud = solicitudReservaRepository.buscarPorIdYProveedorConBloqueo(idSolicitud, proveedor)
             .orElseThrow(() -> new solicitudNoEncontradaException("La solicitud no existe o no está dirigida a usted"));
 
         // 3. Validar que la reserva esté en estado ACEPTADA (CA-02)

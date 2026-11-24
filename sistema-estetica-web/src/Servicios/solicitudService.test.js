@@ -1,5 +1,7 @@
 import {
   aceptarContrapropuesta,
+  cancelarSolicitudCliente,
+  cancelarSolicitudProveedor,
   consultarDetalleRecibida,
   consultarDetalleSolicitud,
   consultarMisSolicitudes,
@@ -430,5 +432,107 @@ describe('HU-016: respuesta del Cliente a la contrapropuesta', () => {
       message:
         'El horario solicitado no se encuentra dentro de la disponibilidad del proveedor',
     });
+  });
+});
+
+describe('HU-017: cancelación de solicitud o reserva', () => {
+  const fetchOriginal = global.fetch;
+
+  afterEach(() => {
+    global.fetch = fetchOriginal;
+    jest.restoreAllMocks();
+  });
+
+  test('el Cliente cancela con PATCH autenticado y envía el motivo', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, {
+        id_solicitud: 17,
+        estado: 'cancelada',
+        motivo_rechazo_cancelacion: 'Ya no lo necesito',
+      })
+    );
+
+    const data = await cancelarSolicitudCliente(
+      'token-cliente',
+      17,
+      'Ya no lo necesito'
+    );
+
+    expect(data).toEqual({
+      id_solicitud: 17,
+      estado: 'cancelada',
+      motivo_rechazo_cancelacion: 'Ya no lo necesito',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/mis-solicitudes/17/cancelar',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer token-cliente',
+        },
+        body: JSON.stringify({ motivo_rechazo: 'Ya no lo necesito' }),
+      })
+    );
+  });
+
+  test('el Proveedor cancela una reserva con PATCH autenticado', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(200, {
+        id_solicitud: 17,
+        estado: 'cancelada',
+        motivo_rechazo_cancelacion: 'No podré asistir',
+      })
+    );
+
+    const data = await cancelarSolicitudProveedor(
+      'token-proveedor',
+      17,
+      'No podré asistir'
+    );
+
+    expect(data.estado).toBe('cancelada');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/solicitudes/recibidas/17/cancelar',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer token-proveedor',
+        },
+        body: JSON.stringify({ motivo_rechazo: 'No podré asistir' }),
+      })
+    );
+  });
+
+  test('propaga el mensaje del backend cuando el estado no permite cancelar', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      respuesta(400, { error: 'La solicitud ya se encuentra cancelada' })
+    );
+
+    await expect(
+      cancelarSolicitudCliente('token-cliente', 17, 'Motivo nuevo')
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'La solicitud ya se encuentra cancelada',
+    });
+  });
+
+  test('no llama al backend sin token para cancelar', async () => {
+    global.fetch = jest.fn();
+
+    await expect(
+      cancelarSolicitudCliente(null, 17, 'Motivo')
+    ).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    await expect(
+      cancelarSolicitudProveedor(undefined, 17, 'Motivo')
+    ).rejects.toMatchObject({
+      status: 401,
+      esErrorAutenticacion: true,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

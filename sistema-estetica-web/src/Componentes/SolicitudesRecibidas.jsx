@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   aceptarSolicitud,
+  cancelarSolicitudProveedor,
   consultarDetalleRecibida,
   consultarSolicitudesRecibidas,
   proponerHorario,
@@ -33,6 +34,12 @@ import {
   obtenerMotivoSolicitud,
   ordenarSolicitudesPorCreacion,
 } from './solicitudConsultaUtilidades';
+import {
+  MOTIVO_CANCELACION_MAX,
+  mensajeErrorCancelacion,
+  puedeCancelarComoProveedor,
+  validarMotivoCancelacion,
+} from './solicitudCancelacionUtilidades';
 
 /**
  * HU-014: consulta de solicitudes recibidas por el Proveedor.
@@ -140,6 +147,13 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
   const [mensajeAccion, setMensajeAccion] = useState(null);
   const fechaMinimaPropuesta = useMemo(() => obtenerFechaHoyISO(), []);
 
+  // HU-017: cancelación de una reserva Aceptada por el Proveedor.
+  const [cancelacion, setCancelacion] = useState({ tipo: null });
+  const [motivoCancelacion, setMotivoCancelacion] = useState('');
+  const [errorMotivoCancelacion, setErrorMotivoCancelacion] = useState(null);
+  const [procesandoCancelacion, setProcesandoCancelacion] = useState(false);
+  const [mensajeCancelacion, setMensajeCancelacion] = useState(null);
+
   const irAlInicio = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
       try {
@@ -237,6 +251,11 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     setErrorPropuesta(null);
     setMensajeAccion(null);
     setProcesandoAccion(false);
+    setCancelacion({ tipo: null });
+    setMotivoCancelacion('');
+    setErrorMotivoCancelacion(null);
+    setMensajeCancelacion(null);
+    setProcesandoCancelacion(false);
   };
 
   const verDetalle = (idSolicitud) => {
@@ -392,6 +411,69 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
     );
   };
 
+  // ─── HU-017: cancelación por el Proveedor ──────────────────────────────────
+
+  const cerrarCancelacion = () => {
+    if (procesandoCancelacion) return;
+    setCancelacion({ tipo: null });
+    setErrorMotivoCancelacion(null);
+  };
+
+  const iniciarCancelacion = () => {
+    if (procesandoCancelacion) return;
+    setMensajeCancelacion(null);
+    setErrorMotivoCancelacion(null);
+    setCancelacion({ tipo: 'confirmar' });
+  };
+
+  const ejecutarCancelacion = async () => {
+    if (!detalle || procesandoCancelacion) return;
+
+    const validacion = validarMotivoCancelacion(motivoCancelacion);
+    if (!validacion.valido) {
+      setErrorMotivoCancelacion(validacion.error);
+      return;
+    }
+
+    setProcesandoCancelacion(true);
+    setMensajeCancelacion(null);
+
+    try {
+      const actualizada = await cancelarSolicitudProveedor(
+        sesion.token,
+        detalle.id_solicitud,
+        validacion.motivo
+      );
+
+      if (
+        !actualizada ||
+        actualizada.id_solicitud === null ||
+        actualizada.id_solicitud === undefined
+      ) {
+        throw new Error('El servidor no confirmó la cancelación de la reserva.');
+      }
+
+      aplicarSolicitudActualizada(actualizada);
+      setCancelacion({ tipo: null });
+      setMotivoCancelacion('');
+      setErrorMotivoCancelacion(null);
+      setMensajeCancelacion({
+        tipo: 'exito',
+        texto: 'Reserva cancelada. El motivo quedó registrado y el horario fue liberado.',
+      });
+    } catch (error) {
+      setMensajeCancelacion({
+        tipo: 'error',
+        texto: mensajeErrorCancelacion(
+          error,
+          'No fue posible cancelar la reserva.'
+        ),
+      });
+    } finally {
+      setProcesandoCancelacion(false);
+    }
+  };
+
   // ─── Detalle de una solicitud recibida ─────────────────────────────────────
   if (vista.tipo === 'detalle') {
     const botonVolver = (
@@ -513,6 +595,18 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
             aria-live="polite"
           >
             {mensajeAccion.texto}
+          </div>
+        )}
+
+        {mensajeCancelacion && (
+          <div
+            className={`alert ${
+              mensajeCancelacion.tipo === 'exito' ? 'alert-success' : 'alert-danger'
+            }`}
+            role={mensajeCancelacion.tipo === 'exito' ? 'status' : 'alert'}
+            aria-live="polite"
+          >
+            {mensajeCancelacion.texto}
           </div>
         )}
 
@@ -793,6 +887,117 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
           </div>
         )}
 
+        {puedeCancelarComoProveedor(detalle) && (
+          <div
+            className="card shadow-sm border-0 mb-4"
+            aria-labelledby="cancelar-reserva-titulo"
+          >
+            <div className="card-body">
+              <h3
+                id="cancelar-reserva-titulo"
+                className="h5 fw-semibold text-dark mb-1"
+              >
+                Cancelar reserva
+              </h3>
+              <p className="small text-muted mb-3">
+                Esta reserva está Aceptada. Si la cancelas, quedará Cancelada, el
+                horario dejará de estar ocupado y se conservará la información
+                histórica. El motivo es obligatorio.
+              </p>
+
+              {cancelacion.tipo === null && (
+                <button
+                  type="button"
+                  className="btn btn-outline-danger"
+                  onClick={iniciarCancelacion}
+                >
+                  Cancelar reserva
+                </button>
+              )}
+
+              {cancelacion.tipo === 'confirmar' && (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    ejecutarCancelacion();
+                  }}
+                  noValidate
+                >
+                  <label
+                    htmlFor="motivo-cancelacion-proveedor"
+                    className="form-label small fw-semibold"
+                  >
+                    Motivo de cancelación <span className="text-danger">*</span>
+                  </label>
+                  <textarea
+                    id="motivo-cancelacion-proveedor"
+                    name="motivo_cancelacion"
+                    rows="3"
+                    maxLength={MOTIVO_CANCELACION_MAX}
+                    className={`form-control ${
+                      errorMotivoCancelacion ? 'is-invalid' : ''
+                    }`}
+                    value={motivoCancelacion}
+                    onChange={(event) => {
+                      setMotivoCancelacion(event.target.value);
+                      if (errorMotivoCancelacion) setErrorMotivoCancelacion(null);
+                    }}
+                    disabled={procesandoCancelacion}
+                    aria-invalid={Boolean(errorMotivoCancelacion)}
+                    aria-describedby={
+                      errorMotivoCancelacion
+                        ? 'error-motivo-cancelacion-proveedor'
+                        : undefined
+                    }
+                    placeholder="Explica al Cliente por qué cancelas la reserva"
+                    required
+                  />
+                  {errorMotivoCancelacion && (
+                    <div
+                      id="error-motivo-cancelacion-proveedor"
+                      className="invalid-feedback d-block"
+                    >
+                      {errorMotivoCancelacion}
+                    </div>
+                  )}
+                  <p className="form-text">
+                    El motivo es obligatorio y no puede superar los{' '}
+                    {MOTIVO_CANCELACION_MAX} caracteres.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      className="btn btn-danger btn-sm"
+                      disabled={procesandoCancelacion}
+                    >
+                      {procesandoCancelacion ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-1"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Cancelando...
+                        </>
+                      ) : (
+                        'Confirmar cancelación'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={cerrarCancelacion}
+                      disabled={procesandoCancelacion}
+                    >
+                      Volver
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="card shadow-sm border-0 mb-4">
           <div className="card-body">
             <h3 className="h5 fw-semibold text-dark mb-3">Información general</h3>
@@ -1062,6 +1267,21 @@ const PanelSolicitudesRecibidas = ({ sesion, onCerrarSesion }) => {
                           {formatearLocalDateTime(solicitud.fecha_creacion) || 'No informada'}
                         </dd>
                       </dl>
+
+                      {String(solicitud.estado).toLowerCase() === 'cancelada' && (
+                        <div className="alert alert-secondary py-2 px-3 mt-3 mb-0 small" role="note">
+                          <p className="fw-semibold mb-1">Motivo de cancelación</p>
+                          <p className="mb-1" style={{ whiteSpace: 'pre-wrap' }}>
+                            {solicitud.motivo_rechazo_cancelacion ||
+                              'No se registró un motivo de cancelación.'}
+                          </p>
+                          <p className="mb-0 text-muted">
+                            Última actualización:{' '}
+                            {formatearLocalDateTime(solicitud.fecha_actualizacion) ||
+                              'No informada'}
+                          </p>
+                        </div>
+                      )}
 
                       {solicitud.fecha_hora_propuesta && (
                         <p className="small text-info-emphasis mt-2 mb-0">

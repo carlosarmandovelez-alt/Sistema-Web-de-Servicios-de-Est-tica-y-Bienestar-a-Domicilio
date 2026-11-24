@@ -134,7 +134,7 @@ public class solicitudController {
     public ResponseEntity<solicitudResponseDTO> cancelarSolicitudCliente(
             Authentication authentication,
             @PathVariable Integer idSolicitud,
-            @RequestBody respuestaSolicitudDTO dto) {
+            @Valid @RequestBody respuestaSolicitudDTO dto) {
         return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "cliente", idSolicitud, dto.getMotivo_rechazo()));
     }
 
@@ -143,7 +143,7 @@ public class solicitudController {
     public ResponseEntity<solicitudResponseDTO> cancelarSolicitudProveedor(
             Authentication authentication,
             @PathVariable Integer idSolicitud,
-            @RequestBody respuestaSolicitudDTO dto) {
+            @Valid @RequestBody respuestaSolicitudDTO dto) {
         return ResponseEntity.ok(solicitudService.cancelarSolicitud(authentication.getName(), "proveedor", idSolicitud, dto.getMotivo_rechazo()));
     }
 

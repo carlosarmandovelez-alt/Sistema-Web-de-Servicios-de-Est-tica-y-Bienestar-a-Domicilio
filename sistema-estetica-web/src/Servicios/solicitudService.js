@@ -450,3 +450,61 @@ export const rechazarContrapropuesta = async (
     motivo ? { motivo_rechazo: motivo } : {},
     { signal }
   );
+
+/**
+ * HU-017: cancela una solicitud o reserva propia del Cliente autenticado.
+ *
+ * Endpoint real:
+ *   PATCH /api/solicitudes/mis-solicitudes/{idSolicitud}/cancelar
+ *
+ * El backend determina el Cliente desde el JWT, valida que la solicitud le
+ * pertenezca y que su estado sea Pendiente, Sugerida o Aceptada. El motivo
+ * es obligatorio y se envía en el campo compartido `motivo_rechazo`, que el
+ * backend persiste en `motivo_rechazo_cancelacion` (VARCHAR(255)).
+ *
+ * @param {string} token JWT del Cliente.
+ * @param {number|string} idSolicitud
+ * @param {string} motivo Motivo de cancelación no vacío.
+ * @returns {Promise<Object>} solicitudResponseDTO en estado cancelada.
+ */
+export const cancelarSolicitudCliente = async (
+  token,
+  idSolicitud,
+  motivo,
+  { signal } = {}
+) =>
+  peticionPatchSolicitud(
+    token,
+    `${API_URL}/mis-solicitudes/${encodeURIComponent(idSolicitud)}/cancelar`,
+    { motivo_rechazo: motivo },
+    'Error al cancelar la solicitud',
+    { signal }
+  );
+
+/**
+ * HU-017: cancela una reserva Aceptada del Proveedor autenticado.
+ *
+ * Endpoint real:
+ *   PATCH /api/solicitudes/recibidas/{idSolicitud}/cancelar
+ *
+ * El backend determina el Proveedor desde el JWT, valida que la reserva esté
+ * asociada a su cuenta y que esté Aceptada. El motivo es obligatorio.
+ *
+ * @param {string} token JWT del Proveedor.
+ * @param {number|string} idSolicitud
+ * @param {string} motivo Motivo de cancelación no vacío.
+ * @returns {Promise<Object>} solicitudResponseDTO en estado cancelada.
+ */
+export const cancelarSolicitudProveedor = async (
+  token,
+  idSolicitud,
+  motivo,
+  { signal } = {}
+) =>
+  peticionPatchSolicitud(
+    token,
+    `${API_URL}/recibidas/${encodeURIComponent(idSolicitud)}/cancelar`,
+    { motivo_rechazo: motivo },
+    'Error al cancelar la reserva',
+    { signal }
+  );
